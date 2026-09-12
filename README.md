@@ -9,7 +9,7 @@
 맞는 사례가 없거나(약한 매칭) 사례로 답할 업무가 아닌 요청(정책 변경·성능 튜닝 의뢰 등)은
 **담당 팀·연락처·접수 채널**을 안내한다. 담당자 디렉터리는 13개 팀이다(사례 카테고리 11개 + 사례 DB 에 없는 영역 2개).
 
-> **웹 데모** — https://yerankim.github.io/work-advisor-demo/ (브라우저 전용 정적 버전, 10장)
+> **웹 데모** — https://yerankim.github.io/work-advisor-demo/ (브라우저 전용 정적 버전, 9장)
 > **기술 정리 문서** — https://yerankim.github.io/work-advisor-demo/tech.html
 
 ---
@@ -144,16 +144,17 @@ work-advisor/
 │   ├── workcases.faiss
 │   ├── metadata.jsonl
 │   └── manifest.json
+├── src/workcase_agent/search.py              # 검색 핵심 로직 + 약한 매칭 판정 + 담당자 라우팅
 ├── scripts/
 │   ├── ask.py            # 질의 → 유사 사례 검색 (메인 진입점)
 │   ├── show_case.py      # 사례 ID → 상세
 │   ├── create_index.py   # 인덱스 (재)생성
 │   ├── prepare_cases.py  # 데이터 → 사례 변환
 │   ├── make_report.py    # HTML 보고서 (선택)
-│   └── build_web_demo.py # 웹 데모(web/index.html) 빌드
-├── src/workcase_agent/search.py              # 검색·약한 매칭 판정·담당자 라우팅
+│   ├── build_web_demo.py # 정적 웹 데모(docs/index.html) 빌드
+│   └── deploy_pages.sh   # 정적 웹 데모를 GitHub Pages 저장소로 푸시
 ├── web/template.html     # 정적 웹 데모 템플릿 (검색·라우팅 로직 JS + UI)
-├── docs/index.html       # 정적 웹 데모 빌드 결과 — GitHub Pages 가 서빙
+├── docs/index.html       # 정적 웹 데모 빌드 결과 (GitHub Pages)
 └── skill/                                    # DeepWork 스킬 (선택 등록)
     ├── SKILL.md
     └── references/output_format.md
