@@ -31,7 +31,9 @@ def main():
     data = data.replace("</", "<\\/")
     html = TEMPLATE.read_text(encoding="utf-8")
     assert "__WORKADVISOR_DATA__" in html
-    OUT.write_text(html.replace("__WORKADVISOR_DATA__", data), encoding="utf-8")
+    from datetime import datetime
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    OUT.write_text(html.replace("__WORKADVISOR_DATA__", data).replace("__BUILD_STAMP__", stamp), encoding="utf-8")
     print(f"wrote {OUT} ({OUT.stat().st_size/1024:.0f} KB, cases={len(cases)}, "
           f"teams={len(contacts.get('by_category', {}))})")
 
