@@ -151,11 +151,7 @@ work-advisor/
 │   ├── prepare_cases.py  # 데이터 → 사례 변환
 │   ├── make_report.py    # HTML 보고서 (선택)
 │   └── build_web_demo.py # 웹 데모(web/index.html) 빌드
-├── app.py                # Streamlit 웹 앱, 로컬 실행 (파이썬 검색·판정·라우팅 + LLM 답변)
-├── src/workcase_agent/
-│   ├── search.py         # 검색·약한 매칭 판정·담당자 라우팅
-│   ├── llm.py            # LLM 어댑터 (Claude / GPT / Gemini / Groq)
-│   └── answer.py         # 답변 프롬프트·LLM 없을 때의 보고서
+├── src/workcase_agent/search.py              # 검색·약한 매칭 판정·담당자 라우팅
 ├── web/template.html     # 정적 웹 데모 템플릿 (검색·라우팅 로직 JS + UI)
 ├── docs/index.html       # 정적 웹 데모 빌드 결과 — GitHub Pages 가 서빙
 └── skill/                                    # DeepWork 스킬 (선택 등록)
@@ -177,29 +173,7 @@ work-advisor/
   실제 신청서명·결재선·설치 프로그램은 사내 규정으로 최종 확인해야 한다.
 - 답변 문장 생성은 채팅 에이전트가 수행한다. CLI 단독으로는 "유사 사례 검색 결과"까지 제공한다.
 
-## 9. 웹 앱 (Streamlit, 로컬 실행)
-
-`app.py` 는 이 저장소의 검색·판정·라우팅 코드를 그대로 실행하는 Streamlit 화면이다. 맞는 사례가 있을 때만
-LLM 으로 답변 문장을 만들고, LLM 은 `src/workcase_agent/llm.py` 어댑터가 환경변수의 키 종류에 따라 고른다.
-키가 없으면 상위 사례 필드를 그대로 정리한 보고서를 보여준다.
-
-| 환경변수 | 사용 모델 (기본값) | 비고 |
-|---|---|---|
-| `GEMINI_API_KEY` | gemini-3.8-flash | 무료 티어 가능 (aistudio.google.com) |
-| `GROQ_API_KEY` | llama-3.3-70b-versatile | 무료 티어 가능 |
-| `ANTHROPIC_API_KEY` | claude-sonnet-5 | 종량제 |
-| `OPENAI_API_KEY` | gpt-5-mini | 종량제 |
-| (없음) | — | 상위 사례 필드를 그대로 정리한 보고서 출력 |
-
-`LLM_PROVIDER` / `LLM_MODEL` 로 제공자·모델을 강제할 수 있다. 키는 코드·저장소에 넣지 않는다.
-
-```bash
-pip install streamlit
-export GEMINI_API_KEY=...        # 선택
-streamlit run app.py
-```
-
-## 10. 정적 웹 데모 (브라우저 안 JS 복제본)
+## 9. 정적 웹 데모 (브라우저 안 JS 복제본)
 
 `docs/index.html` 은 사례 303건과 담당자 디렉터리를 내장한 단일 HTML 이다(소스: `web/template.html`). 두 곳에 배포한다.
 
