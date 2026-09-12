@@ -1,4 +1,4 @@
-"""Work Advisor — Streamlit 웹 앱 (Hugging Face Spaces 배포용).
+"""Work Advisor — Streamlit 웹 앱 (로컬 실행용).
 
 저장소의 파이썬 검색·판정·라우팅(search.py)을 그대로 실행하고, 맞는 사례가 있을 때만
 LLM(llm.py 어댑터: Claude / GPT / Gemini / Groq 중 키가 있는 것)으로 답변 문장을 만든다.
@@ -150,7 +150,7 @@ def answer(query: str, history: list) -> dict:
             note = f"LLM 호출에 실패해 상위 사례 필드를 그대로 정리했습니다. ({str(e)[:120]})"
     else:
         text = deterministic_report(results, related)
-        note = "LLM 키가 설정되지 않아 상위 사례 필드를 그대로 정리했습니다. Secrets 에 GEMINI_API_KEY 등을 넣으면 질문에 맞춘 문장을 생성합니다."
+        note = "LLM 키가 설정되지 않아 상위 사례 필드를 그대로 정리했습니다. 환경변수에 GEMINI_API_KEY 등을 넣으면 질문에 맞춘 문장을 생성합니다."
     return {"role": "assistant", "kind": "answer", "strip": strip, "results": results,
             "text": text, "note": note, "reason": reason_text(routing)}
 
