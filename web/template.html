@@ -339,19 +339,32 @@ function relatedRoute(category) { return ENTRY[category] ? pack(category, 'case_
 /* ───────── Claude (artifact sample) ───────── */
 let sample = null, sampleState = 'checking';
 const modePill = document.getElementById('modePill');
-function setMode(state) {
+let offReason = '';
+function setMode(state, reason) {
   sampleState = state;
   const lbl = modePill.querySelector('span');
   modePill.classList.remove('on', 'off');
-  if (state === 'on') { modePill.classList.add('on'); lbl.textContent = '답변 생성: Claude 연결됨'; }
-  else if (state === 'off') { modePill.classList.add('off'); lbl.textContent = '검색 전용 모드'; document.getElementById('hintRight').innerHTML = '검색·담당자 연결은 이 페이지에서 바로 동작합니다 · <a href="https://claude.ai/code/artifact/49af41f2-d655-4e48-b4f5-a56ea2fe04fa" target="_blank" rel="noopener">Claude 답변 생성 버전 열기</a>'; }
+  if (state === 'on') { modePill.classList.add('on'); lbl.textContent = '답변 생성: Claude 연결됨'; modePill.title = ''; }
+  else if (state === 'off') {
+    modePill.classList.add('off'); lbl.textContent = '검색 전용 모드'; offReason = reason || '';
+    modePill.title = offReason;
+    document.getElementById('hintRight').innerHTML = (offReason ? esc(offReason) + ' · ' : '') +
+      '검색·담당자 연결은 이 페이지에서 바로 동작합니다' +
+      (window.claude ? '' : ' · <a href="https://claude.ai/code/artifact/49af41f2-d655-4e48-b4f5-a56ea2fe04fa" target="_blank" rel="noopener">claude.ai 에서 열기</a>');
+  }
   else lbl.textContent = '답변 생성 확인 중';
 }
 (async () => {
+  // 왜 답변 생성이 안 되는지 구분해 보여준다: (1) claude.ai 뷰어 밖 (2) 뷰어 안이지만 이 계정에 sample 기능이 제공되지 않음
+  if (!(window.claude && typeof claude.use === 'function')) { setMode('off', 'claude.ai 뷰어 밖에서 열려 답변 생성을 쓸 수 없습니다'); return; }
+  try { sample = await claude.use('sample'); } catch (e) { sample = null; }
+  if (sample) { setMode('on'); return; }
+  let why = '이 계정·환경에서는 Claude 답변 생성 기능이 제공되지 않습니다';
   try {
-    if (window.claude && typeof claude.use === 'function') { sample = await claude.use('sample'); }
-  } catch (e) { sample = null; }
-  setMode(sample ? 'on' : 'off');
+    const perms = await claude.use('permissions');
+    if (perms) { const st = await perms.state('sample'); if (st === 'denied') why = '답변 생성 허용을 거절해 검색 전용으로 동작합니다 (새로고침 후 다시 허용 가능)'; else if (st === 'prompt' || st === 'granted') why = '답변 생성 기능을 불러오지 못했습니다 (새로고침 후 다시 시도)'; }
+  } catch (e) { /* 진단 정보 없음 */ }
+  setMode('off', why);
 })();
 
 const REQUEST_TYPES = (() => {
@@ -624,7 +637,7 @@ async function submit(q) {
       } else {
         setStep(card, 'out', 'active', '사례 요약 중');
         answerText = caseReport(q, cases, decision.related);
-        body.innerHTML = `<div class="md">${md(answerText)}</div><div class="notice info" style="margin-top:10px">검색 전용 모드: 상위 사례의 필드를 그대로 정리했습니다. 질문에 맞춘 답변 문장은 <a href="https://claude.ai/code/artifact/49af41f2-d655-4e48-b4f5-a56ea2fe04fa" target="_blank" rel="noopener">Claude 답변 생성 버전</a>에서 볼 수 있습니다.</div>`;
+        body.innerHTML = `<div class="md">${md(answerText)}</div><div class="notice info" style="margin-top:10px">검색 전용 모드: 상위 사례의 필드를 그대로 정리했습니다.${offReason ? ' ' + esc(offReason) + '.' : ''}</div>`;
       }
       setStep(card, 'out', 'done', '완료');
       card.appendChild(el('div', '', evidenceHtml(cands, decision.case_ids, '')).firstElementChild);
