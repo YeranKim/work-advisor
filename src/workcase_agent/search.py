@@ -25,10 +25,38 @@ META_FILE = Path("indexes/metadata.jsonl")
 VECTOR_WEIGHT = 0.6
 BM25_WEIGHT = 0.4
 
+# ── 약한 매칭 판정 ─────────────────────────────────────────────
+# 최고 사례의 원본 벡터 유사도(vector_score)가 이 값 미만이면 '약한 매칭'.
+# 정상 질의 vector_score ≈ 0.87+, 무관 질의 ≈ 0.80 이하.
+WEAK_MATCH_THRESHOLD = 0.83
+# 보조 신호: 벡터는 경계값을 넘겼지만 1위 사례의 bm25_norm 이 바닥(키워드 미매칭)이면 오탐.
+WEAK_MATCH_BM25_FLOOR = 0.05
+
+# ── 담당자 라우팅 ──────────────────────────────────────────────
+# 질의 ↔ 담당자 디렉터리 항목(팀·담당 업무 설명) 임베딩 유사도가 이 값 이상이면
+# 그 팀으로 안내한다. 미만이면 기본 창구(서비스데스크).
+CONTACT_SIM_FLOOR = 0.80
+
+
+# 한글 토큰 끝에 자주 붙는 조사. '배치가'·'계정을'이 '배치'·'계정'과도 맞도록 어간을 함께 낸다.
+_PARTICLES = ("에서는", "으로는", "에서", "으로", "이랑", "까지", "부터", "에게", "처럼",
+              "이", "가", "은", "는", "을", "를", "의", "에", "로", "과", "와", "도", "만", "랑")
+
 
 def _tokenize(text: str):
-    """간단 한국어/영숫자 토큰화. 한글·영문·숫자 연속을 토큰으로."""
-    return re.findall(r"[가-힣]+|[a-zA-Z0-9]+", text.lower())
+    """간단 한국어/영숫자 토큰화. 한글·영문·숫자 연속을 토큰으로.
+
+    한글 토큰은 원형에 더해 조사를 뗀 어간도 함께 낸다(문서·질의 양쪽 동일 적용).
+    """
+    out = []
+    for tok in re.findall(r"[가-힣]+|[a-zA-Z0-9]+", text.lower()):
+        out.append(tok)
+        if "가" <= tok[0] <= "힣":
+            for p in _PARTICLES:
+                if len(tok) - len(p) >= 2 and tok.endswith(p):
+                    out.append(tok[: -len(p)])
+                    break
+    return out
 
 
 def _minmax(vals):
@@ -45,24 +73,163 @@ def _is_case(rec: dict) -> bool:
 
 
 @lru_cache(maxsize=1)
-def _contacts():
-    """데이터 파일의 담당자 디렉터리(contacts 레코드)를 로드."""
-    for l in CASES.read_text(encoding="utf-8").splitlines():
-        if not l.strip():
+def load_contacts() -> dict:
+    """담당자 디렉터리(record_type=contacts) 반환. 없으면 빈 dict.
+
+    '관련 사례를 찾지 못했을 때' 채팅 에이전트가 담당 팀·연락처를 안내하는 데 쓴다.
+    """
+    for line in CASES.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
             continue
-        rec = json.loads(l)
+        rec = json.loads(line)
         if rec.get("record_type") == "contacts":
             return rec.get("contacts", {})
     return {}
 
 
+def directory_entries():
+    """디렉터리를 (key, entry) 목록으로. 'default' 가 항상 맨 앞."""
+    c = load_contacts()
+    out = []
+    if c.get("default"):
+        out.append(("default", c["default"]))
+    out.extend(c.get("by_category", {}).items())
+    return out
+
+
 def get_contact(category: Optional[str] = None):
     """카테고리별 담당자 안내를 반환. 없으면 기본 서비스데스크."""
-    c = _contacts()
+    c = load_contacts()
     by_cat = c.get("by_category", {})
     if category and category in by_cat:
         return by_cat[category]
     return c.get("default", {})
+
+
+def _norm_query(text: str) -> str:
+    """키워드 규칙 비교용: 소문자화 + 공백 제거."""
+    return re.sub(r"\s+", "", text.lower())
+
+
+def _keyword_hits(query: str, keywords) -> list:
+    """디렉터리 항목의 keywords 중 질의에 일치하는 것을 반환.
+
+    '+' 로 이은 키워드(예: '재인증+주기')는 모든 조각이 질의에 포함될 때만 일치.
+    """
+    q = _norm_query(query)
+    hits = []
+    for kw in keywords or []:
+        parts = [p for p in _norm_query(kw).split("+") if p]
+        if parts and all(p in q for p in parts):
+            hits.append(kw)
+    return hits
+
+
+@lru_cache(maxsize=1)
+def _contact_embeddings():
+    """디렉터리 항목(팀·담당 업무)을 passage 로 임베딩. (key 목록, 행렬)"""
+    _, _, _, model, _ = _load()
+    keys, texts = [], []
+    for key, e in directory_entries():
+        keys.append(key)
+        texts.append("passage: " + f"담당 영역: {key}\n팀: {e.get('team','')}\n"
+                     f"업무: {e.get('note','')}")
+    emb = model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+    return keys, emb
+
+
+def _case_categories() -> set:
+    cases, *_ = _load()
+    return {c["category"] for c in cases}
+
+
+def is_weak_match(results) -> tuple:
+    """검색 결과만으로 본 약한 매칭 여부와 사유.
+
+    (1) 결과 없음 (2) top vector_score < 임계값 (3) top bm25_norm 이 바닥(키워드 미매칭)
+    """
+    if not results:
+        return True, "no_results"
+    top = results[0]
+    if top.get("vector_score", 0.0) < WEAK_MATCH_THRESHOLD:
+        return True, "low_vector_similarity"
+    if top.get("bm25_norm", 0.0) < WEAK_MATCH_BM25_FLOOR:
+        return True, "no_keyword_overlap"
+    return False, ""
+
+
+def route_contact(query: str, results) -> dict:
+    """질의를 담당 팀에 연결한다. 반환:
+
+    {
+      "weak_match": bool,      # 최종 판정 (사례로 답하지 말고 담당자 안내)
+      "weak_reason": str,      # no_results / low_vector_similarity / no_keyword_overlap /
+                               # directory_only_topic / ""
+      "contact": {...}|None,   # weak_match 일 때 안내할 담당 팀 (key, routed_by, matched_keywords 포함)
+      "related_contact": {...}|None,  # weak 이 아닐 때 1위 사례 카테고리의 담당 팀 (추가 문의처)
+      "contact_similarity": {key: score}  # 디버그용
+    }
+
+    판정 순서:
+      A. 디렉터리에만 있는 영역(사례 DB 에 카테고리가 없는 팀, 예: 성능·튜닝, 인증·세션 정책)의
+         키워드 규칙이 일치하면 → 검색 결과가 그럴듯해 보여도 담당자 안내 (weak_match=True).
+         (예: 'MFA 재인증 주기 늘리기'는 세션 만료 장애 사례와 벡터 유사도가 높지만 정책 변경 요청이다)
+      B. 검색 신호로 약한 매칭이면 → 키워드 일치 팀 > 임베딩 유사도 ≥ CONTACT_SIM_FLOOR 팀 > 기본 창구.
+      C. 정상 매칭이면 → contact 없음, related_contact 에 1위 사례 카테고리 담당 팀.
+    """
+    entries = directory_entries()
+    keys, emb = _contact_embeddings()
+    _, _, _, model, _ = _load()
+    q = model.encode(["query: " + query], convert_to_numpy=True,
+                     normalize_embeddings=True)
+    sims = {k: round(float(x), 4) for k, x in zip(keys, (q @ emb.T)[0])}
+    covered = _case_categories()
+
+    def _pack(key, entry, routed_by, hits=None):
+        d = dict(entry)
+        d.pop("keywords", None)
+        d.update({"key": key, "routed_by": routed_by,
+                  "matched_keywords": hits or [],
+                  "similarity": sims.get(key)})
+        return d
+
+    weak, reason = is_weak_match(results)
+    hits_by_key = {k: _keyword_hits(query, e.get("keywords")) for k, e in entries}
+
+    # A. 디렉터리 전용 영역 키워드 일치 → 사례보다 담당자 우선
+    for key, entry in entries:
+        if key == "default" or key in covered:
+            continue
+        if hits_by_key[key]:
+            return {"weak_match": True, "weak_reason": "directory_only_topic",
+                    "contact": _pack(key, entry, "keyword", hits_by_key[key]),
+                    "related_contact": None, "contact_similarity": sims}
+
+    # B. 약한 매칭 → 키워드 > 유사도 > 기본
+    if weak:
+        best_kw = max((k for k, _ in entries if k != "default"),
+                      key=lambda k: len(hits_by_key[k]), default=None)
+        if best_kw and hits_by_key[best_kw]:
+            entry = dict(entries)[best_kw]
+            return {"weak_match": True, "weak_reason": reason,
+                    "contact": _pack(best_kw, entry, "keyword", hits_by_key[best_kw]),
+                    "related_contact": None, "contact_similarity": sims}
+        best_sim = max((k for k, _ in entries if k != "default"), key=lambda k: sims[k])
+        if sims[best_sim] >= CONTACT_SIM_FLOOR:
+            return {"weak_match": True, "weak_reason": reason,
+                    "contact": _pack(best_sim, dict(entries)[best_sim], "similarity"),
+                    "related_contact": None, "contact_similarity": sims}
+        return {"weak_match": True, "weak_reason": reason,
+                "contact": _pack("default", get_contact(None), "default"),
+                "related_contact": None, "contact_similarity": sims}
+
+    # C. 정상 매칭 → 1위 사례 카테고리의 담당 팀을 추가 문의처로
+    top_cat = results[0]["category"]
+    related = None
+    if top_cat in dict(entries):
+        related = _pack(top_cat, dict(entries)[top_cat], "case_category")
+    return {"weak_match": False, "weak_reason": "", "contact": None,
+            "related_contact": related, "contact_similarity": sims}
 
 
 @lru_cache(maxsize=1)
@@ -77,19 +244,6 @@ def _load():
     # BM25 는 사례 search_text 를 토큰화해 구축 (벡터 인덱스와 동일한 순서)
     bm25 = BM25Okapi([_tokenize(c["search_text"]) for c in cases])
     return cases, meta, index, model, bm25
-
-
-@lru_cache(maxsize=1)
-def load_contacts() -> dict:
-    """담당자 디렉터리(record_type=contacts) 반환. 없으면 빈 dict.
-
-    '관련 사례를 찾지 못했을 때' 채팅 에이전트가 담당 팀·연락처를 안내하는 데 쓴다.
-    """
-    for line in CASES.read_text(encoding="utf-8").splitlines():
-        rec = json.loads(line)
-        if rec.get("record_type") == "contacts":
-            return rec.get("contacts", {})
-    return {}
 
 
 def search_cases(query: str, top_k: int = 5,

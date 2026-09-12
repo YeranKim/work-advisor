@@ -7,6 +7,13 @@
 
 --json  : 기계가 파싱하기 좋은 JSON을 stdout으로 출력 (채팅 Agent가 근거로 사용)
 기본    : 사람이 읽기 좋은 요약 출력
+
+JSON 필드:
+  results          유사 사례 Top-K
+  weak_match       True 면 사례로 답하지 말고 contact 로 담당자 안내
+  weak_reason      no_results / low_vector_similarity / no_keyword_overlap / directory_only_topic
+  contact          weak_match 일 때 안내할 담당 팀 (team/contact/channel/note + key/routed_by/matched_keywords)
+  related_contact  weak_match 가 아닐 때 1위 사례 카테고리의 담당 팀 (추가 문의처로 답변 말미에 사용 가능)
 """
 import argparse
 import json
@@ -15,20 +22,22 @@ from pathlib import Path
 
 # src 를 import 경로에 추가
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from workcase_agent.search import search_cases, get_contact  # noqa: E402
+from workcase_agent.search import search_cases, route_contact  # noqa: E402
 
-# 최고 사례의 원본 벡터 유사도(vector_score)가 이 값 미만이면
-# '약한 매칭'으로 보고 담당자 안내를 붙인다.
-# 하이브리드 score 는 min-max 정규화라 최상위가 항상 높으므로 판단에 쓰지 않는다.
-# 정상 질의 vector_score ≈ 0.9+, 무관 질의 ≈ 0.78 이하.
-WEAK_MATCH_THRESHOLD = 0.83
 
-# 보조 신호: 벡터 유사도는 임계값을 넘겼지만(경계값) 키워드가 사실상
-# 하나도 맞지 않는 경우를 잡아낸다. bm25_norm 은 전체 사례에 대한 min-max
-# 정규화 값이라, 1위 사례가 이 값 이하이면 'BM25 최하위권 = 키워드 미매칭'을
-# 뜻한다. 벡터가 문장 형식만 겹쳐 경계값(0.83~0.85)을 넘긴 오탐을 걸러낸다.
-# 정상 질의는 1위 bm25_norm 이 0.9+ 로 나오므로 오차단 위험이 낮다.
-WEAK_MATCH_BM25_FLOOR = 0.05
+def _print_contact(label: str, c: dict):
+    print(f"{label} → {c.get('team','')}")
+    print(f"  연락처: {c.get('contact','')}")
+    print(f"  접수  : {c.get('channel','')}")
+    if c.get("note"):
+        print(f"  담당  : {c.get('note','')}")
+    why = c.get("routed_by", "")
+    if why == "keyword":
+        print(f"  근거  : 디렉터리 키워드 일치 {c.get('matched_keywords')}")
+    elif why == "similarity":
+        print(f"  근거  : 담당 업무 설명과의 유사도 {c.get('similarity')}")
+    elif why == "default":
+        print("  근거  : 특정 팀을 정하기 어려워 1차 접수 창구로 안내")
 
 
 def main():
@@ -44,37 +53,33 @@ def main():
         args.query, top_k=args.top_k,
         category=args.category, status=args.status,
     )
-
-    # 약한 매칭 판단:
-    #  (1) 결과가 없거나
-    #  (2) 최고 사례의 원본 벡터 유사도가 임계값 미만이거나
-    #  (3) 벡터는 임계값을 넘겼지만 1위의 bm25_norm 이 바닥 수준(키워드 미매칭)
-    # (3) 은 벡터가 문장 형식만 겹쳐 경계값을 넘긴 오탐을 걸러내는 보조 신호다.
-    top_vec = results[0].get("vector_score", 0.0) if results else 0.0
-    top_bm25 = results[0].get("bm25_norm", 0.0) if results else 0.0
-    weak = bool(
-        (not results)
-        or top_vec < WEAK_MATCH_THRESHOLD
-        or top_bm25 < WEAK_MATCH_BM25_FLOOR
-    )
-    # 약한 매칭이면 특정 카테고리를 신뢰하기 어려우므로 1차 창구(기본)로 안내한다.
-    contact = get_contact(None) if weak else None
+    # 약한 매칭 판정 + 담당자 라우팅 (규칙은 search.route_contact 참조)
+    routing = route_contact(args.query, results)
+    weak = routing["weak_match"]
+    contact = routing["contact"]
 
     if args.json:
         print(json.dumps({
             "query": args.query,
             "results": results,
             "weak_match": weak,
+            "weak_reason": routing["weak_reason"],
             "contact": contact,
+            "related_contact": routing["related_contact"],
         }, ensure_ascii=False))
         return
 
-    if not results:
-        print("관련 사례를 찾지 못했습니다.")
-        if contact:
-            print(f"\n담당자 안내 → {contact.get('team','')}"
-                  f" ({contact.get('contact','')})")
-            print(f"  접수: {contact.get('channel','')}")
+    if weak:
+        if routing["weak_reason"] == "directory_only_topic":
+            print("이 요청은 과거 처리 사례로 답할 업무가 아니라 담당 팀에 직접 요청할 사항입니다.")
+        else:
+            print("질문에 정확히 맞는 사례를 찾지 못했습니다.")
+        print()
+        _print_contact("담당자 안내", contact)
+        if results:
+            print("\n참고 (직접 맞는 사례는 아님):")
+            for r in results[:2]:
+                print(f"  - {r['case_id']} ({r['status']}) {r['title']}")
         return
 
     print(f"질의: {args.query}")
@@ -95,10 +100,8 @@ def main():
         print(f"  결과    : {r['outcome']}")
         print()
 
-    if weak and contact:
-        print("⚠ 유사도가 낮습니다. 아래 담당자에게 문의하세요.")
-        print(f"  담당 → {contact.get('team','')} ({contact.get('contact','')})")
-        print(f"  접수 : {contact.get('channel','')}")
+    if routing["related_contact"]:
+        _print_contact("추가 문의처", routing["related_contact"])
 
 
 if __name__ == "__main__":

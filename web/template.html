@@ -1,0 +1,646 @@
+<meta charset="utf-8">
+<title>Work Advisor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#f2f5f8; --surface:#ffffff; --surface-2:#f7f9fb; --ink:#14212e; --ink-2:#3d4c5c; --muted:#66788a;
+  --line:#d8e0e8; --line-2:#e8edf2;
+  --primary:#1b4f8a; --primary-ink:#ffffff; --primary-soft:#e5eef9; --primary-soft-ink:#173f6e;
+  --handoff:#b45f0e; --handoff-soft:#fbf0e2; --handoff-ink:#7a3f06;
+  --good:#2b7a4b; --good-soft:#e3f2e8; --warn:#a8352b; --warn-soft:#fae6e3;
+  --shadow:0 1px 2px rgba(20,33,46,.06),0 8px 24px -12px rgba(20,33,46,.18);
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0e141b; --surface:#161e28; --surface-2:#1c2632; --ink:#e7edf3; --ink-2:#c2ccd6; --muted:#8fa0b1;
+    --line:#2a3644; --line-2:#222d39;
+    --primary:#7fb1ea; --primary-ink:#0b1a2b; --primary-soft:#1b2d43; --primary-soft-ink:#b9d4f3;
+    --handoff:#f0a44e; --handoff-soft:#33230f; --handoff-ink:#f6c88a;
+    --good:#6cc48f; --good-soft:#15291d; --warn:#f08a80; --warn-soft:#3a1c19;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0e141b; --surface:#161e28; --surface-2:#1c2632; --ink:#e7edf3; --ink-2:#c2ccd6; --muted:#8fa0b1;
+  --line:#2a3644; --line-2:#222d39;
+  --primary:#7fb1ea; --primary-ink:#0b1a2b; --primary-soft:#1b2d43; --primary-soft-ink:#b9d4f3;
+  --handoff:#f0a44e; --handoff-soft:#33230f; --handoff-ink:#f6c88a;
+  --good:#6cc48f; --good-soft:#15291d; --warn:#f08a80; --warn-soft:#3a1c19;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+a{color:var(--primary)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:300px minmax(0,1fr);min-height:100vh}
+.rail{border-right:1px solid var(--line);background:var(--surface);padding:24px 20px 32px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;overflow-y:auto}
+.main{display:flex;flex-direction:column;min-height:100vh}
+
+.brand h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin:0 0 2px}
+.brand p{margin:0;color:var(--muted);font-size:13px}
+.brand .meta{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:500;border:1px solid var(--line);color:var(--ink-2);background:var(--surface-2)}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.pill.on .dot{background:var(--good)}
+.pill.off .dot{background:var(--warn)}
+
+.rail h2{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px}
+.scenario{display:flex;flex-direction:column;gap:6px}
+.scenario button{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;line-height:1.4;font-size:13.5px;transition:border-color .15s,background .15s}
+.scenario button:hover{border-color:var(--primary);background:var(--primary-soft)}
+.scenario button b{display:block;font-size:11px;color:var(--primary);font-weight:600;letter-spacing:.04em;margin-bottom:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:4px 11px;font-size:12.5px;color:var(--ink-2)}
+.chips button:hover{border-color:var(--primary);color:var(--primary)}
+
+.flow{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;counter-reset:step}
+.flow li{position:relative;padding-left:30px;font-size:13px;color:var(--ink-2)}
+.flow li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:2px;width:20px;height:20px;border-radius:50%;background:var(--primary-soft);color:var(--primary-soft-ink);font-size:11px;font-weight:600;display:grid;place-items:center}
+.flow li b{color:var(--ink);font-weight:600}
+
+details.dir summary{cursor:pointer;font-size:13px;color:var(--ink-2);list-style:none;display:flex;align-items:center;gap:6px}
+details.dir summary::-webkit-details-marker{display:none}
+details.dir summary::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;margin-left:2px}
+details.dir[open] summary::before{transform:rotate(45deg)}
+.dirlist{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column}
+.dirlist li{padding:7px 0;border-top:1px solid var(--line-2);font-size:12.5px}
+.dirlist li b{display:block;font-weight:600;color:var(--ink)}
+.dirlist li span{color:var(--muted)}
+.dirlist li.extra b::after{content:"사례 DB 밖";font-size:10px;font-weight:600;color:var(--handoff);border:1px solid var(--handoff);border-radius:4px;padding:0 4px;margin-left:6px;vertical-align:1px}
+
+.topbar{display:none}
+.thread{flex:1;padding:28px 32px 24px;max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.welcome{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;box-shadow:var(--shadow)}
+.welcome h2{margin:0 0 6px;font-size:18px;font-weight:600;text-wrap:balance}
+.welcome p{margin:0;color:var(--ink-2);max-width:62ch}
+.welcome .areas{margin:14px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+.welcome .areas span{font-size:12px;padding:2px 8px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line-2);color:var(--ink-2)}
+
+.turn-user{display:flex;flex-direction:column;gap:4px}
+.turn-user .eyebrow{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.turn-user .q{font-size:17px;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.strip{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--line-2);background:var(--surface-2)}
+.step{flex:1 1 0;min-width:180px;display:flex;align-items:center;gap:9px;padding:10px 14px;font-size:12.5px;color:var(--muted);border-right:1px solid var(--line-2)}
+.step:last-child{border-right:0}
+.step .ic{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;flex:none;font-size:10px;font-weight:700}
+.step.active{color:var(--ink)}
+.step.active .ic{border-color:var(--primary);color:var(--primary);animation:pulse 1.2s ease-in-out infinite}
+.step.done{color:var(--ink-2)}
+.step.done .ic{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}
+.step.handoff.done .ic{background:var(--handoff);border-color:var(--handoff);color:#fff}
+.step .lbl b{display:block;font-weight:600;color:inherit;font-size:12.5px}
+.step .lbl span{display:block;font-size:11.5px;line-height:1.3}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(27,79,138,.35)}50%{box-shadow:0 0 0 5px rgba(27,79,138,0)}}
+@media (prefers-reduced-motion:reduce){.step.active .ic{animation:none}}
+
+.body{padding:18px 22px 20px}
+.thinking{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
+.thinking i{width:8px;height:8px;border-radius:50%;background:var(--primary);animation:blink 1s infinite;font-style:normal}
+@keyframes blink{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.thinking i{animation:none}}
+
+.md h2{font-size:17px;font-weight:600;margin:0 0 10px;letter-spacing:-.01em}
+.md h3{font-size:14.5px;font-weight:600;margin:18px 0 6px;color:var(--ink)}
+.md h3:first-child{margin-top:0}
+.md p{margin:0 0 10px}
+.md ul,.md ol{margin:0 0 10px;padding-left:22px}
+.md li{margin:2px 0}
+.md code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;background:var(--surface-2);border:1px solid var(--line-2);padding:0 4px;border-radius:4px}
+.md table{border-collapse:collapse;font-size:13.5px;margin:0 0 10px}
+.md th,.md td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+.md th{background:var(--surface-2);font-weight:600}
+.md .tbl{overflow-x:auto}
+.md strong{font-weight:600}
+
+.handoff-card{border:1px solid var(--handoff);border-radius:var(--radius);background:var(--handoff-soft);padding:16px 18px;display:grid;grid-template-columns:1fr;gap:10px;margin:12px 0 8px}
+.handoff-card .eyebrow{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--handoff-ink)}
+.handoff-card .team{font-size:19px;font-weight:700;color:var(--ink);letter-spacing:-.01em;margin-top:-4px}
+.handoff-card dl{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:14px}
+.handoff-card dt{color:var(--handoff-ink);font-weight:500}
+.handoff-card dd{margin:0;color:var(--ink)}
+.handoff-card dd.mono{font-size:14px}
+.lead{margin:0 0 4px;font-size:15px}
+.clarify{margin:10px 0 0}
+.clarify h4{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--ink-2)}
+.clarify ul{margin:0;padding-left:20px;color:var(--ink-2);font-size:14px}
+.why{font-size:13px;color:var(--muted);margin-top:8px}
+
+details.ev{border-top:1px solid var(--line-2);padding:10px 22px 12px;background:var(--surface)}
+details.ev summary{cursor:pointer;font-size:13px;color:var(--ink-2);font-weight:500;list-style:none;display:flex;align-items:center;gap:8px}
+details.ev summary::-webkit-details-marker{display:none}
+details.ev summary::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;margin-left:2px}
+details.ev[open] summary::before{transform:rotate(45deg)}
+details.ev summary .cnt{font-size:11.5px;color:var(--muted);font-weight:400}
+.cases{margin:10px 0 0;display:flex;flex-direction:column;gap:8px}
+.case{border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px;background:var(--surface)}
+.case.picked{border-color:var(--primary)}
+.case .h{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px}
+.case .id{font-size:12px;color:var(--primary)}
+.case .st{font-size:11px;padding:1px 7px;border-radius:4px;background:var(--surface-2);border:1px solid var(--line-2);color:var(--ink-2)}
+.case .st.done{background:var(--good-soft);color:var(--good);border-color:transparent}
+.case .st.rej{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.case .st.prog{background:var(--primary-soft);color:var(--primary-soft-ink);border-color:transparent}
+.case .t{font-weight:600}
+.case .cat{color:var(--muted);font-size:12px}
+.case .sit{color:var(--ink-2);margin:2px 0 0}
+.case .kv{margin:6px 0 0;display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;font-size:12.5px;color:var(--ink-2)}
+.case .kv b{font-weight:500;color:var(--muted)}
+.case .sc{margin-left:auto;font-size:11px;color:var(--muted)}
+.reason{font-size:13px;color:var(--ink-2);margin:8px 0 0}
+.reason b{font-weight:600;color:var(--ink)}
+.reason .kw{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--surface-2);border:1px solid var(--line-2);padding:0 5px;border-radius:4px}
+
+.notice{padding:10px 14px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:13.5px;border:1px solid transparent}
+.notice.info{background:var(--primary-soft);color:var(--primary-soft-ink)}
+
+.composer{position:sticky;bottom:0;background:linear-gradient(to top,var(--ground) 70%,transparent);padding:12px 32px 22px}
+.composer .box{max-width:860px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:flex-end;padding:10px 10px 10px 16px}
+.composer .box:focus-within{border-color:var(--primary)}
+.composer textarea{flex:1;border:0;background:transparent;resize:none;font:inherit;color:var(--ink);line-height:1.5;max-height:160px;padding:6px 0;outline:none}
+.composer textarea::placeholder{color:var(--muted)}
+.btn{border:0;border-radius:8px;padding:9px 16px;font-weight:600;font-size:14px;background:var(--primary);color:var(--primary-ink);transition:opacity .15s}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line)}
+.hint{max-width:860px;margin:8px auto 0;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+@media (max-width:900px){
+  .app{grid-template-columns:1fr}
+  .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:18px 16px}
+  .rail .flow-sec,.rail .dir-sec{display:none}
+  .thread{padding:20px 16px}
+  .composer{padding:10px 12px 16px}
+  .step{min-width:100%;border-right:0;border-bottom:1px solid var(--line-2)}
+  .step:last-child{border-bottom:0}
+}
+</style>
+
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <h1>Work Advisor</h1>
+      <p>보험사 사내 IT 업무, 과거 사례로 절차를 안내하고 맞는 사례가 없으면 담당 팀을 연결합니다.</p>
+      <div class="meta">
+        <span class="pill">사례 303건</span>
+        <span class="pill">담당 팀 13</span>
+        <span class="pill" id="modePill"><i class="dot"></i><span>답변 생성 확인 중</span></span>
+      </div>
+    </div>
+
+    <section>
+      <h2>시연 시나리오</h2>
+      <div class="scenario" id="scenario"></div>
+    </section>
+
+    <section>
+      <h2>다른 질문 예시</h2>
+      <div class="chips" id="chips"></div>
+    </section>
+
+    <section class="flow-sec">
+      <h2>처리 흐름</h2>
+      <ol class="flow">
+        <li><b>사례 검색</b> — 질문과 가까운 과거 처리 사례 후보를 찾습니다.</li>
+        <li><b>판정</b> — 후보가 질문의 업무 유형을 실제로 다루는지 확인합니다. 정책 변경·튜닝 의뢰처럼 사례 DB 밖 업무는 키워드 규칙이 먼저 걸러냅니다.</li>
+        <li><b>답변 또는 연결</b> — 맞는 사례가 있으면 절차·문서·결재선을 정리하고, 없으면 담당 팀·연락처·접수 채널을 그대로 안내합니다.</li>
+      </ol>
+    </section>
+
+    <section class="dir-sec">
+      <details class="dir">
+        <summary>담당 팀 디렉터리</summary>
+        <ul class="dirlist" id="dirlist"></ul>
+      </details>
+    </section>
+  </aside>
+
+  <main class="main">
+    <div class="thread" id="thread">
+      <div class="welcome">
+        <h2>무엇을 처리해야 하나요?</h2>
+        <p>계정 발급, VPN 신청, 방화벽 오픈, 배포, 장애 문의 같은 사내 IT 업무를 평소 말하듯 물어보세요. 왼쪽 시연 시나리오는 계정 발급 → 접속 장애 → 정책 변경 요청처 안내로 이어지는 3턴 흐름입니다.</p>
+        <div class="areas" id="areas"></div>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="box">
+        <textarea id="input" rows="1" placeholder="예: 퇴직자 DB 계정 회수해야 하는데 절차 알려줘"></textarea>
+        <button class="btn ghost" id="stopBtn" hidden>중지</button>
+        <button class="btn" id="askBtn">질문하기</button>
+      </div>
+      <div class="hint"><span>Enter 전송 · Shift+Enter 줄바꿈</span><span id="hintRight"></span></div>
+    </div>
+  </main>
+</div>
+
+<script id="wa-data" type="application/json">__WORKADVISOR_DATA__</script>
+<script>
+(function(){
+'use strict';
+const DATA = JSON.parse(document.getElementById('wa-data').textContent);
+const CASES = DATA.cases, CONTACTS = DATA.contacts, CATEGORIES = DATA.categories;
+const BY_ID = Object.fromEntries(CASES.map(c => [c.case_id, c]));
+const COVERED = new Set(CASES.map(c => c.category));
+
+/* ───────── 토큰화 (scripts 의 _tokenize 와 동일 규칙 + 한글 2음절 조각) ───────── */
+const PARTICLES = ["에서는","으로는","에서","으로","이랑","까지","부터","에게","처럼","이","가","은","는","을","를","의","에","로","과","와","도","만","랑"];
+function tokenize(text){
+  const out = []; const re = /[가-힣]+|[a-z0-9]+/g; const t = String(text).toLowerCase(); let m;
+  while ((m = re.exec(t))) {
+    const tok = m[0]; out.push(tok);
+    if (/[가-힣]/.test(tok[0])) {
+      for (const p of PARTICLES) { if (tok.length - p.length >= 2 && tok.endsWith(p)) { out.push(tok.slice(0, -p.length)); break; } }
+      if (tok.length >= 3) for (let i = 0; i < tok.length - 1; i++) out.push('#' + tok.slice(i, i + 2));
+    }
+  }
+  return out;
+}
+function caseText(c){
+  return [c.category, c.request_type, c.title, c.situation, c.target_system, c.environment,
+    (c.required_documents||[]).join(' '), (c.approval_route||[]).join(' '), (c.required_tools||[]).join(' '),
+    (c.pre_checks||[]).join(' '), (c.process_steps||[]).join(' '), (c.cautions||[]).join(' ')].join('\n');
+}
+/* ───────── BM25 ───────── */
+class BM25 {
+  constructor(docs, k1 = 1.5, b = 0.75) {
+    this.k1 = k1; this.b = b; this.docs = docs; this.N = docs.length;
+    this.len = docs.map(d => d.length); this.avg = this.len.reduce((a, b) => a + b, 0) / this.N;
+    this.tf = docs.map(d => { const m = new Map(); for (const t of d) m.set(t, (m.get(t) || 0) + 1); return m; });
+    this.df = new Map(); for (const m of this.tf) for (const t of m.keys()) this.df.set(t, (this.df.get(t) || 0) + 1);
+  }
+  scores(q) {
+    const out = new Array(this.N).fill(0);
+    for (const t of new Set(q)) {
+      const df = this.df.get(t); if (!df) continue;
+      const idf = Math.log((this.N - df + 0.5) / (df + 0.5) + 1);
+      for (let i = 0; i < this.N; i++) {
+        const f = this.tf[i].get(t); if (!f) continue;
+        out[i] += idf * (f * (this.k1 + 1)) / (f + this.k1 * (1 - this.b + this.b * this.len[i] / this.avg));
+      }
+    }
+    return out;
+  }
+}
+const bm25 = new BM25(CASES.map(c => tokenize(caseText(c))));
+function searchCases(query, topK = 8) {
+  const s = bm25.scores(tokenize(query));
+  const max = Math.max(...s);
+  return s.map((v, i) => ({ c: CASES[i], raw: v, norm: max > 0 ? v / max : 0 }))
+    .filter(x => x.raw > 0).sort((a, b) => b.raw - a.raw).slice(0, topK);
+}
+
+/* ───────── 담당자 라우팅 (search.route_contact 와 같은 순서) ───────── */
+const ENTRIES = [['default', CONTACTS.default], ...Object.entries(CONTACTS.by_category || {})];
+const ENTRY = Object.fromEntries(ENTRIES);
+const normQ = q => String(q).toLowerCase().replace(/\s+/g, '');
+function keywordHits(q, kws) {
+  const n = normQ(q);
+  return (kws || []).filter(kw => { const parts = normQ(kw).split('+').filter(Boolean); return parts.length && parts.every(p => n.includes(p)); });
+}
+const ASK_FOR = {
+  '인증·세션 정책': ['대상 시스템·앱(예: 보안접속 에이전트, 그룹웨어)', '원하는 재인증 주기·세션 시간 값과 업무상 사유'],
+  '성능·튜닝': ['대상 DB·시스템과 환경(운영/개발)', '느린 쿼리(SQL)·화면과 발생 시간대'],
+  'default': ['어떤 시스템·업무와 관련된 요청인지', '원하는 처리 결과(신청/변경/문의 중 무엇인지)'],
+};
+function askFor(key) { return ASK_FOR[key] || ['대상 시스템과 환경(운영/개발/검증)', '요청 사유와 필요한 기간·범위']; }
+function pack(key, routed_by, hits) {
+  const e = ENTRY[key] || CONTACTS.default;
+  return { key, team: e.team, contact: e.contact, channel: e.channel, note: e.note, routed_by, matched_keywords: hits || [] };
+}
+/* A 단계: 사례 DB 밖 영역 키워드 → 검색 결과와 무관하게 담당자 연결 */
+function directoryOnlyRoute(query) {
+  for (const [key, e] of ENTRIES) {
+    if (key === 'default' || COVERED.has(key)) continue;
+    const hits = keywordHits(query, e.keywords);
+    if (hits.length) return pack(key, 'keyword', hits);
+  }
+  return null;
+}
+/* B 단계: 약한 매칭일 때 → 키워드 일치 팀 > 판정기가 고른 팀 > 기본 창구 */
+function weakRoute(query, judgeKey) {
+  let best = null, bestN = 0;
+  for (const [key, e] of ENTRIES) {
+    if (key === 'default') continue;
+    const hits = keywordHits(query, e.keywords);
+    if (hits.length > bestN) { best = pack(key, 'keyword', hits); bestN = hits.length; }
+  }
+  if (best) return best;
+  if (judgeKey && judgeKey !== 'default' && ENTRY[judgeKey]) return pack(judgeKey, 'judge');
+  return pack('default', 'default');
+}
+function relatedRoute(category) { return ENTRY[category] ? pack(category, 'case_category') : null; }
+
+/* ───────── Claude (artifact sample) ───────── */
+let sample = null, sampleState = 'checking';
+const modePill = document.getElementById('modePill');
+function setMode(state) {
+  sampleState = state;
+  const lbl = modePill.querySelector('span');
+  modePill.classList.remove('on', 'off');
+  if (state === 'on') { modePill.classList.add('on'); lbl.textContent = '답변 생성: Claude 연결됨'; }
+  else if (state === 'off') { modePill.classList.add('off'); lbl.textContent = '검색 전용 모드'; document.getElementById('hintRight').innerHTML = '검색·담당자 연결은 이 페이지에서 바로 동작합니다 · <a href="https://claude.ai/code/artifact/49af41f2-d655-4e48-b4f5-a56ea2fe04fa" target="_blank" rel="noopener">Claude 답변 생성 버전 열기</a>'; }
+  else lbl.textContent = '답변 생성 확인 중';
+}
+(async () => {
+  try {
+    if (window.claude && typeof claude.use === 'function') { sample = await claude.use('sample'); }
+  } catch (e) { sample = null; }
+  setMode(sample ? 'on' : 'off');
+})();
+
+const REQUEST_TYPES = (() => {
+  const m = {}; for (const c of CASES) { (m[c.category] = m[c.category] || new Set()).add(c.request_type); }
+  return Object.entries(m).map(([k, v]) => `- ${k}: ${[...v].join(', ')}`).join('\n');
+})();
+const DIRECTORY_TEXT = ENTRIES.map(([k, e]) => `- key="${k}" | ${e.team} | 담당: ${e.note}`).join('\n');
+
+function historyText(turns) {
+  const prev = turns.slice(-6);
+  if (!prev.length) return '(없음)';
+  return prev.map(t => (t.role === 'user' ? '사용자: ' : '안내: ') + String(t.text || '').slice(0, 500)).join('\n');
+}
+function candidatesText(cands) {
+  return cands.map(x => `- ${x.c.case_id} | ${x.c.category} | 유형: ${x.c.request_type} | ${x.c.title} (${x.c.status}) | 대상: ${x.c.target_system}/${x.c.environment} | ${x.c.situation}`).join('\n');
+}
+function judgePrompt(query, cands, history) {
+  return `당신은 보험사 사내 IT 업무 사례 검색 시스템의 "판정기"입니다. 사용자의 질문이 아래 후보 사례로 답할 수 있는 업무인지 판단하세요.
+
+[사용자 질문]
+${query}
+
+[앞선 대화]
+${history}
+
+[후보 사례] (키워드 검색 상위, 관련 없을 수 있음)
+${cands.length ? candidatesText(cands) : '(후보 없음)'}
+
+[사례 DB가 다루는 업무 유형] (카테고리: 요청 유형)
+${REQUEST_TYPES}
+
+[담당 팀 디렉터리]
+${DIRECTORY_TEXT}
+
+판정 규칙:
+1. 후보 사례 중 사용자가 요청한 것과 "같은 업무 유형"을 실제로 처리한 사례가 있으면 weak_match=false, case_ids 에 그 사례 1~4개(관련 높은 순).
+2. 후보가 문장만 비슷하고 업무 유형이 다르면(예: 장애 사례 vs 정책 변경 요청, 계정 발급 vs 성능 튜닝) weak_match=true, reason="no_matching_case".
+3. 질문이 사례 DB 업무 유형에 없는 요청(정책·기준 변경, 성능 튜닝 의뢰, IT 외 총무·인사 등)이면 weak_match=true, reason="directory_only_topic" 또는 "no_matching_case".
+4. weak_match=true 이면 contact_key 에 디렉터리 key 중 가장 맞는 팀을 고르세요. 어느 팀인지 정말 모르겠으면 "default".
+5. weak_match=false 이면 contact_key 는 1위 사례의 카테고리 key.
+6. clarify 에는 답을 더 정확히 하기 위해 되물을 정보 1~2개(짧게).
+7. one_liner 는 사용자에게 보여줄 한 줄 상황 설명(존댓말, 25자 내외, 내부 용어·점수 금지).
+
+아래 JSON 만 출력하세요(설명 금지):
+{"weak_match": true|false, "reason": "matched"|"no_matching_case"|"directory_only_topic", "case_ids": ["..."], "contact_key": "...", "clarify": ["..."], "one_liner": "..."}`;
+}
+function answerPrompt(query, cases, related, history) {
+  const slim = cases.map(c => ({ case_id: c.case_id, category: c.category, status: c.status, title: c.title, situation: c.situation,
+    target_system: c.target_system, environment: c.environment, required_documents: c.required_documents, missing_document: c.missing_document,
+    approval_route: c.approval_route, required_tools: c.required_tools, pre_checks: c.pre_checks, process_steps: c.process_steps, cautions: c.cautions, outcome: c.outcome }));
+  return `당신은 보험사 사내 IT 업무를 과거 처리 사례를 근거로 안내하는 도우미 "Work Advisor" 입니다. 아래 사례의 실제 필드만 근거로 한국어(존댓말)로 답하세요. 사례에 없는 내용은 만들지 않습니다.
+
+[사용자 질문]
+${query}
+
+[앞선 대화]
+${history}
+
+[근거 사례] (JSON)
+${JSON.stringify(slim, null, 0)}
+
+[추가 문의처]
+${related ? `${related.team} · ${related.contact} · ${related.channel}` : '(없음)'}
+
+작성 규칙:
+- 권장 뼈대는 "## 제목" 아래 "### ① 상황 요약 / ### ② 권장 처리 절차 / ### ③ 준비할 정보·문서 / ### ④ 주의 사항 / ### ⑤ 참고 사례" 이지만 고정 틀은 아닙니다. 절차 전체를 묻는 질문은 5개를 대체로 다 쓰고, 단답형 질문(누구 결재?, 무슨 문서?)은 해당 부분만 간결히, 장애·문의는 원인 확인과 담당 연락을 앞세우세요.
+- ② 는 process_steps 를 종합한 번호 목록. 사례마다 approval_route 가 다르면 "개인정보 포함 시 A→B→정보보호, 아니면 A→B" 처럼 조건별 분기를 명시.
+- ③ 은 required_documents 의 합집합 + 공통 확인 정보(대상 시스템, 환경, 기간, 개인정보 여부).
+- ④ 는 cautions 의 공통 항목과, 반려/보완 후 완료 사례의 missing_document 를 근거로 "처음부터 함께 제출" 같은 실질 조언.
+- ⑤ 는 각 사례를 "case_id (상태) — 한 줄 요약" 으로.
+- 맨 끝에 "추가 문의: 팀 · 연락처 · 접수 채널" 한 줄(추가 문의처가 있을 때만).
+- 금지: 고정폭 구분선(━ ─ =), "model:" 같은 화자 접두사, 데이터 출처 고지("합성/가상 데이터", "사내 규정으로 최종 확인"), 내부 점수·파라미터 언급, 영역 한정 프레이밍("11개 영역 특화").
+- Markdown 표준 문법만 사용. 본문 텍스트로 바로 시작.`;
+}
+function whyPrompt(query, contact, reason) {
+  return `사용자 질문: "${query}"
+이 질문은 과거 처리 사례로 절차를 안내하는 대신 아래 담당 팀으로 연결하기로 판정되었습니다.
+- 팀: ${contact.team}
+- 담당 업무: ${contact.note}
+- 판정 사유 코드: ${reason}
+사용자에게 보여줄 한 문장(존댓말, 40자 내외)으로 "왜 이 팀으로 연결하는지"를 자연스럽게 설명하세요. 점수·키워드·내부 용어는 언급하지 말고 문장만 출력하세요.`;
+}
+
+/* ───────── Markdown 렌더 (소형) ───────── */
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function inline(s) {
+  return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+function md(text) {
+  const lines = String(text).replace(/\r/g, '').replace(/^\s*(model|assistant)\s*:\s*/i, '').split('\n');
+  let html = '', para = [], list = null, table = null;
+  const flushP = () => { if (para.length) { html += '<p>' + inline(para.join(' ')) + '</p>'; para = []; } };
+  const flushL = () => { if (list) { html += `<${list.tag}>` + list.items.map(i => '<li>' + inline(i) + '</li>').join('') + `</${list.tag}>`; list = null; } };
+  const flushT = () => { if (table) { const rows = table.filter(r => !/^\s*\|?\s*:?-{2,}/.test(r)); const cells = r => r.replace(/^\s*\||\|\s*$/g, '').split('|').map(c => inline(c.trim()));
+    html += '<div class="tbl"><table>' + rows.map((r, i) => '<tr>' + cells(r).map(c => (i === 0 ? '<th>' : '<td>') + c + (i === 0 ? '</th>' : '</td>')).join('') + '</tr>').join('') + '</table></div>'; table = null; } };
+  for (const raw of lines) {
+    const line = raw.replace(/^[━─=]{3,}\s*$/, '');
+    let m;
+    if (/^\s*\|/.test(line)) { flushP(); flushL(); (table = table || []).push(line); continue; } else flushT();
+    if ((m = line.match(/^\s*(#{1,3})\s+(.*)$/))) { flushP(); flushL(); const lv = m[1].length; html += `<h${lv === 1 ? 2 : lv === 2 ? 2 : 3}>${inline(m[2])}</h${lv === 1 ? 2 : lv === 2 ? 2 : 3}>`; continue; }
+    if ((m = line.match(/^\s*[-*•]\s+(.*)$/))) { flushP(); if (!list || list.tag !== 'ul') { flushL(); list = { tag: 'ul', items: [] }; } list.items.push(m[1]); continue; }
+    if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) { flushP(); if (!list || list.tag !== 'ol') { flushL(); list = { tag: 'ol', items: [] }; } list.items.push(m[1]); continue; }
+    if (!line.trim()) { flushP(); flushL(); continue; }
+    if (list && /^\s{2,}/.test(raw)) { list.items[list.items.length - 1] += ' ' + line.trim(); continue; }
+    flushL(); para.push(line.trim());
+  }
+  flushP(); flushL(); flushT();
+  return html;
+}
+
+/* ───────── 결정적(LLM 없이) 사례 보고서 — 검색 전용 모드용 ───────── */
+function caseReport(query, cases, related) {
+  const top = cases[0];
+  const docs = [...new Set(cases.flatMap(c => c.required_documents || []))];
+  const routes = [...new Set(cases.map(c => (c.approval_route || []).join(' → ')))];
+  const missing = cases.filter(c => c.missing_document && c.status !== '완료').map(c => `${c.case_id}: ${c.missing_document} 누락으로 ${c.status}`);
+  const cautions = [...new Set(cases.flatMap(c => c.cautions || []))].slice(0, 4);
+  let s = `## ${top.title} 처리 안내\n\n### ① 상황 요약\n${top.situation}\n\n### ② 권장 처리 절차\n`;
+  (top.process_steps || []).forEach((st, i) => { s += `${i + 1}. ${st}\n`; });
+  s += `\n결재선: ${routes.join(' / ')}\n\n### ③ 준비할 정보·문서\n` + docs.map(d => `- ${d}`).join('\n') + `\n- 대상 시스템·환경(운영/개발/검증), 사용 기간, 개인정보 포함 여부\n\n### ④ 주의 사항\n` + cautions.map(c => `- ${c}`).join('\n');
+  if (missing.length) s += '\n' + missing.map(m => `- ${m} → 처음부터 함께 제출`).join('\n');
+  s += `\n\n### ⑤ 참고 사례\n` + cases.map(c => `- ${c.case_id} (${c.status}) — ${c.title}`).join('\n');
+  if (related) s += `\n\n추가 문의: ${related.team} · ${related.contact} · ${related.channel}`;
+  return s;
+}
+
+/* ───────── UI ───────── */
+const thread = document.getElementById('thread');
+const input = document.getElementById('input');
+const askBtn = document.getElementById('askBtn');
+const stopBtn = document.getElementById('stopBtn');
+const turns = [];
+let running = false, ctl = null;
+
+const SCENARIO = [
+  ['1턴 · 계정 발급', '계약계 DB 신규 조회 계정을 발급받으려고 하는데 어떻게 해야 해?'],
+  ['2턴 · 접속 장애', '보안접속 에이전트 연결이 계속 끊기는데 어떡해야 해'],
+  ['3턴 · 정책 변경 요청처', 'MFA 세션의 재인증 주기를 늘리려면 어떻게 해야 해?'],
+];
+const CHIPS = ['퇴직자 DB 계정 회수해야 하는데 절차 알려줘', '재택근무 VPN 신청 어떻게 해?', '운영 배포 롤백은 어떻게 해?',
+  '쿼리가 너무 느려서 실행계획 튜닝 받고 싶어', '회의실 예약은 어떻게 해?'];
+const scen = document.getElementById('scenario');
+SCENARIO.forEach(([lbl, q]) => { const b = document.createElement('button'); b.innerHTML = `<b>${esc(lbl)}</b>${esc(q)}`; b.onclick = () => submit(q); scen.appendChild(b); });
+const chips = document.getElementById('chips');
+CHIPS.forEach(q => { const b = document.createElement('button'); b.textContent = q; b.onclick = () => submit(q); chips.appendChild(b); });
+const areas = document.getElementById('areas');
+CATEGORIES.forEach(c => { const s = document.createElement('span'); s.textContent = c; areas.appendChild(s); });
+const dirlist = document.getElementById('dirlist');
+ENTRIES.forEach(([k, e]) => { const li = document.createElement('li'); if (k !== 'default' && !COVERED.has(k)) li.className = 'extra';
+  li.innerHTML = `<b>${esc(e.team)}</b><span class="mono">${esc(e.contact)}</span><br><span>${esc(k === 'default' ? e.note : e.note)}</span>`; dirlist.appendChild(li); });
+
+input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(input.value); } });
+askBtn.onclick = () => submit(input.value);
+stopBtn.onclick = () => { if (ctl) ctl.abort(); };
+
+function el(tag, cls, html) { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
+function stripHtml() {
+  return `<div class="strip">
+    <div class="step" data-step="search"><span class="ic">1</span><span class="lbl"><b>사례 검색</b><span>대기</span></span></div>
+    <div class="step" data-step="judge"><span class="ic">2</span><span class="lbl"><b>판정</b><span>대기</span></span></div>
+    <div class="step" data-step="out"><span class="ic">3</span><span class="lbl"><b>답변 생성</b><span>대기</span></span></div>
+  </div>`;
+}
+function setStep(card, name, state, sub, title) {
+  const s = card.querySelector(`[data-step="${name}"]`); s.classList.remove('active', 'done'); if (state) s.classList.add(state);
+  if (sub != null) s.querySelector('.lbl span').textContent = sub; if (title) s.querySelector('.lbl b').textContent = title;
+  if (state === 'done') s.querySelector('.ic').textContent = '✓';
+}
+function statusClass(st) { return st === '완료' ? 'done' : st === '반려' ? 'rej' : st === '진행 중' ? 'prog' : ''; }
+function caseHtml(c, picked, sc) {
+  return `<div class="case${picked ? ' picked' : ''}"><div class="h"><span class="id mono">${esc(c.case_id)}</span><span class="st ${statusClass(c.status)}">${esc(c.status)}</span><span class="t">${esc(c.title)}</span><span class="cat">${esc(c.category)} · ${esc(c.request_type)}</span>${sc != null ? `<span class="sc">검색 ${Math.round(sc * 100)}%</span>` : ''}</div>
+  <div class="sit">${esc(c.situation)}</div>
+  <div class="kv"><b>필요 문서</b><span>${esc((c.required_documents || []).join(', '))}${c.missing_document ? ` <em>(누락: ${esc(c.missing_document)})</em>` : ''}</span><b>결재선</b><span>${esc((c.approval_route || []).join(' → '))}</span><b>설치 도구</b><span>${esc((c.required_tools || []).join(', '))}</span></div></div>`;
+}
+function evidenceHtml(cands, pickedIds, reasonHtml) {
+  const picked = new Set(pickedIds || []);
+  return `<details class="ev"><summary>검색 후보 사례 <span class="cnt">${cands.length}건${picked.size ? ` · 근거로 채택 ${picked.size}건` : ''}</span></summary>
+    ${reasonHtml ? `<div class="reason">${reasonHtml}</div>` : ''}
+    <div class="cases">${cands.map(x => caseHtml(x.c, picked.has(x.c.case_id), x.norm)).join('')}</div></details>`;
+}
+function handoffHtml(contact, oneLiner, clarify, why) {
+  return `<p class="lead">${esc(oneLiner)}</p>
+  <div class="handoff-card"><div class="eyebrow">담당 팀 연결</div><div class="team">${esc(contact.team)}</div>
+    <dl><dt>연락처</dt><dd class="mono">${esc(contact.contact)}</dd><dt>접수 채널</dt><dd>${esc(contact.channel)}</dd><dt>이 팀이 맡는 업무</dt><dd>${esc(contact.note)}</dd></dl>
+    ${why ? `<div class="why" data-why>${esc(why)}</div>` : '<div class="why" data-why hidden></div>'}
+  </div>
+  <div class="clarify"><h4>접수 전에 알려주시면 좋은 정보</h4><ul>${(clarify || []).map(q => `<li>${esc(q)}</li>`).join('')}</ul></div>`;
+}
+function routeReasonHtml(contact, reason) {
+  if (!contact) return '';
+  if (contact.routed_by === 'keyword') return `<b>판정 근거</b> — 질문에 ${contact.matched_keywords.map(k => `<span class="kw">${esc(k)}</span>`).join(' ')} 키워드가 있어 ${reason === 'directory_only_topic' ? '사례 DB 밖 업무로 보고 ' : ''}<b>${esc(contact.team)}</b> 로 연결했습니다.`;
+  if (contact.routed_by === 'judge') return `<b>판정 근거</b> — 후보 사례가 같은 업무 유형이 아니어서, 담당 업무 설명이 가장 맞는 <b>${esc(contact.team)}</b> 로 연결했습니다.`;
+  if (contact.routed_by === 'default') return `<b>판정 근거</b> — 맞는 사례도, 특정할 담당 팀도 없어 1차 접수 창구로 안내했습니다.`;
+  return '';
+}
+
+async function submit(q) {
+  q = String(q || '').trim(); if (!q || running) return;
+  input.value = ''; input.style.height = 'auto';
+  running = true; askBtn.disabled = true; stopBtn.hidden = false; ctl = new AbortController();
+  const u = el('div', 'turn-user', `<span class="eyebrow">질문</span><div class="q">${esc(q)}</div>`); thread.appendChild(u);
+  const card = el('div', 'card', stripHtml() + '<div class="body"><div class="thinking"><i></i>사례를 찾는 중…</div></div>');
+  thread.appendChild(card); card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  const body = card.querySelector('.body');
+  const history = historyText(turns);
+  turns.push({ role: 'user', text: q });
+  let answerText = '';
+  try {
+    /* 1. 검색 */
+    setStep(card, 'search', 'active', '후보 검색 중');
+    await new Promise(r => setTimeout(r, 120));
+    const cands = searchCases(q, 8);
+    setStep(card, 'search', 'done', `후보 ${cands.length}건`);
+
+    /* 2. 판정 — A) 사례 DB 밖 영역 키워드 규칙이 먼저 */
+    setStep(card, 'judge', 'active', '업무 유형 확인 중');
+    let decision;
+    const forced = directoryOnlyRoute(q);
+    if (forced) {
+      decision = { weak_match: true, reason: 'directory_only_topic', case_ids: [], contact: forced, clarify: askFor(forced.key),
+        one_liner: '이 요청은 과거 처리 사례로 답할 업무가 아니라 담당 팀에 직접 요청할 사항입니다.' };
+    } else if (!cands.length) {
+      decision = { weak_match: true, reason: 'no_matching_case', case_ids: [], contact: weakRoute(q, null), clarify: askFor('default'),
+        one_liner: '이 질문에 정확히 맞는 사례가 없습니다.' };
+    } else if (sample) {
+      body.innerHTML = '<div class="thinking"><i></i>후보 사례가 질문의 업무 유형과 맞는지 확인하는 중…</div>';
+      const j = await sample.json(judgePrompt(q, cands, history), { signal: ctl.signal, cache: false });
+      const ids = (j.case_ids || []).filter(id => BY_ID[id] && cands.some(x => x.c.case_id === id));
+      if (j.weak_match || !ids.length) {
+        const contact = weakRoute(q, j.contact_key);
+        decision = { weak_match: true, reason: j.reason === 'directory_only_topic' ? 'directory_only_topic' : 'no_matching_case', case_ids: [], contact,
+          clarify: (j.clarify && j.clarify.length ? j.clarify : askFor(contact.key)).slice(0, 2),
+          one_liner: j.one_liner || (j.reason === 'directory_only_topic' ? '이 요청은 과거 처리 사례로 답할 업무가 아니라 담당 팀에 직접 요청할 사항입니다.' : '이 질문에 정확히 맞는 사례가 없습니다.') };
+      } else {
+        decision = { weak_match: false, reason: 'matched', case_ids: ids.slice(0, 4), contact: null, related: relatedRoute(BY_ID[ids[0]].category) };
+      }
+    } else {
+      /* 검색 전용: 상위 후보의 키워드 점수가 충분하면 사례로, 아니면 담당자 */
+      const strong = cands[0].raw >= 6 && cands.filter(x => x.norm >= 0.6).length >= 1;
+      if (strong) { const ids = cands.filter(x => x.norm >= 0.45).slice(0, 4).map(x => x.c.case_id); decision = { weak_match: false, reason: 'matched', case_ids: ids, contact: null, related: relatedRoute(BY_ID[ids[0]].category) }; }
+      else { const contact = weakRoute(q, null); decision = { weak_match: true, reason: 'no_matching_case', case_ids: [], contact, clarify: askFor(contact.key), one_liner: '이 질문에 정확히 맞는 사례가 없습니다.' }; }
+    }
+
+    /* 3. 출력 */
+    if (decision.weak_match) {
+      setStep(card, 'judge', 'done', decision.reason === 'directory_only_topic' ? '사례 DB 밖 업무' : '맞는 사례 없음');
+      const stepOut = card.querySelector('[data-step="out"]'); stepOut.classList.add('handoff');
+      setStep(card, 'out', 'done', decision.contact.team, '담당자 연결');
+      body.innerHTML = handoffHtml(decision.contact, decision.one_liner, decision.clarify, null);
+      card.appendChild(el('div', '', evidenceHtml(cands, [], routeReasonHtml(decision.contact, decision.reason))).firstElementChild);
+      answerText = `${decision.one_liner} 담당: ${decision.contact.team} (${decision.contact.contact}, ${decision.contact.channel})`;
+      if (sample) {
+        try {
+          const w = await sample(whyPrompt(q, decision.contact, decision.reason), { signal: ctl.signal, modelTier: 'quick', cache: false });
+          const d = body.querySelector('[data-why]'); if (d && w && w.text) { d.textContent = w.text.trim().split('\n')[0]; d.hidden = false; }
+        } catch (e) { /* 설명 문장은 선택 사항 */ }
+      }
+    } else {
+      setStep(card, 'judge', 'done', `맞는 사례 ${decision.case_ids.length}건`);
+      const cases = decision.case_ids.map(id => BY_ID[id]);
+      if (sample) {
+        setStep(card, 'out', 'active', '절차 정리 중');
+        body.innerHTML = '<div class="thinking"><i></i>사례를 근거로 절차를 정리하는 중…</div>';
+        const mdBox = el('div', 'md'); let shown = false;
+        const r = await sample(answerPrompt(q, cases, decision.related, history), { signal: ctl.signal, cache: false,
+          onText: ({ text }) => { if (!shown) { body.innerHTML = ''; body.appendChild(mdBox); shown = true; } mdBox.innerHTML = md(text); } });
+        answerText = r.text; mdBox.innerHTML = md(r.text);
+        if (r.truncated) body.appendChild(el('div', 'notice info', '답변이 길어 일부가 잘렸습니다. 질문을 나눠서 다시 물어보세요.'));
+      } else {
+        setStep(card, 'out', 'active', '사례 요약 중');
+        answerText = caseReport(q, cases, decision.related);
+        body.innerHTML = `<div class="md">${md(answerText)}</div><div class="notice info" style="margin-top:10px">검색 전용 모드: 상위 사례의 필드를 그대로 정리했습니다. 질문에 맞춘 답변 문장은 <a href="https://claude.ai/code/artifact/49af41f2-d655-4e48-b4f5-a56ea2fe04fa" target="_blank" rel="noopener">Claude 답변 생성 버전</a>에서 볼 수 있습니다.</div>`;
+      }
+      setStep(card, 'out', 'done', '완료');
+      card.appendChild(el('div', '', evidenceHtml(cands, decision.case_ids, '')).firstElementChild);
+    }
+  } catch (e) {
+    const code = e && e.code;
+    if (code === 'cancelled') { body.innerHTML = '<div class="notice info">중지했습니다.</div>'; }
+    else if (code === 'not_granted') { setMode('off'); body.innerHTML = '<div class="notice">Claude 사용이 허용되지 않아 답변을 생성할 수 없습니다. 같은 질문을 다시 보내면 검색 전용 모드로 안내합니다.</div>'; }
+    else if (code === 'rate_limited') { body.innerHTML = '<div class="notice">요청이 많아 잠시 후 다시 시도해 주세요.</div>'; }
+    else { body.innerHTML = `<div class="notice">답변을 만드는 중 문제가 생겼습니다. ${esc((e && e.message) || String(e))}</div>`; }
+    ['search', 'judge', 'out'].forEach(n => { const s = card.querySelector(`[data-step="${n}"]`); if (s.classList.contains('active')) { s.classList.remove('active'); s.querySelector('.lbl span').textContent = '중단'; } });
+  } finally {
+    turns.push({ role: 'assistant', text: answerText });
+    running = false; askBtn.disabled = false; stopBtn.hidden = true; ctl = null;
+    card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }
+}
+})();
+</script>

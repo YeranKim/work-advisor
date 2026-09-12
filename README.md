@@ -6,6 +6,12 @@
 한국어 질의를 그대로 임베딩(multilingual-e5)해 FAISS 로 검색한다. 외부 LLM API 없이
 로컬에서 검색이 동작하며, 답변 문장 생성은 이 저장소를 연 채팅 에이전트가 담당한다.
 
+맞는 사례가 없거나(약한 매칭) 사례로 답할 업무가 아닌 요청(정책 변경·성능 튜닝 의뢰 등)은
+**담당 팀·연락처·접수 채널**을 안내한다. 담당자 디렉터리는 13개 팀이다(사례 카테고리 11개 + 사례 DB 에 없는 영역 2개).
+
+> **웹 앱** — 파이썬 그대로 실행되는 Streamlit 앱(`app.py`)을 Hugging Face Spaces 에 배포한다(9장).
+> 브라우저 전용 정적 데모는 https://yerankim.github.io/work-advisor-demo/ (10장).
+
 ---
 
 ## 1. 요구 사항
@@ -96,8 +102,31 @@ python scripts/ask.py "질문" --top-k 4 --json
 | 2턴 | 보안접속 에이전트 연결이 계속 끊기는데 어떡해야 해 | SYN-IT-INC-0301·0303·0302 (IT 장애·문의) | 장애 진단 보고서 (MFA 세션 만료 / 유휴 타임아웃 / 단말 정책 3원인) |
 | 3턴 | MFA 세션의 재인증 주기를 늘리려면 어떻게 해야 해? | 담당자 디렉터리 '인증·세션 정책' | 담당자 안내 (인증인프라팀 · 내선 3320 · iam-auth@example.local) |
 
-> 3턴은 개별 장애 처리 사례가 아니라 정책 변경 요청이므로, 검색 사례로 답하지 않고
-> 담당자 디렉터리(`load_contacts()`)로 요청처를 안내한다.
+> 3턴은 개별 장애 처리 사례가 아니라 정책 변경 요청이다. 벡터 유사도만 보면 '세션 만료 끊김' 장애
+> 사례가 상위에 오지만, `route_contact()` 의 디렉터리 키워드 규칙(`재인증+주기` 등)이 먼저 걸러
+> `weak_match: true` + 인증인프라팀으로 안내한다.
+
+## 4-6. 담당자 라우팅 (약한 매칭 처리)
+
+`scripts/ask.py --json` 은 `weak_match` 와 함께 `contact` / `related_contact` 를 돌려준다.
+판정은 `src/workcase_agent/search.py` 의 `route_contact()` 가 담당하며 순서는 다음과 같다.
+
+| 단계 | 조건 | 결과 |
+|---|---|---|
+| A. 디렉터리 전용 영역 | 사례 DB 에 없는 팀(성능·튜닝, 인증·세션 정책)의 키워드 규칙이 질의에 일치 | `weak_match: true`, `weak_reason: directory_only_topic`, 해당 팀 |
+| B. 약한 매칭 | 결과 없음 OR 1위 벡터 유사도 < 0.83 OR 1위 bm25_norm < 0.05 | 키워드 일치 팀 → 담당 업무 설명과의 임베딩 유사도 ≥ 0.80 인 팀 → 기본 창구 순 |
+| C. 정상 매칭 | 그 외 | `contact: null`, `related_contact` 에 1위 사례 카테고리 담당 팀 |
+
+키워드 규칙은 데이터 파일의 contacts 레코드 안 `keywords` 에 있다. `+` 로 이은 항목(예: `세션+유효시간`)은
+모든 조각이 질의(소문자·공백 제거)에 포함될 때만 일치한다. 팀·연락처·키워드를 바꾸려면 그 레코드만 고치면 된다
+(인덱스 재생성 불필요).
+
+```bash
+python scripts/ask.py "MFA 세션의 재인증 주기를 늘리려면 어떻게 해야 해?"
+# → 담당자 안내 → 인증인프라팀 (IAM·MFA 운영) / 내선 3320 / iam-auth@example.local
+python scripts/ask.py "쿼리가 너무 느려서 실행계획 튜닝 받고 싶어" --json
+# → "weak_match": true, "weak_reason": "directory_only_topic", "contact": {"team": "DB 성능관리팀 …"}
+```
 
 ## 5. 다룰 수 있는 업무 영역 (11개)
 
@@ -110,18 +139,26 @@ DB 계정·권한 / 사내 계정·그룹웨어 / VPN·원격접속 / 프로그�
 ```
 work-advisor/
 ├── requirements.txt
-├── data/processed/insurance_it_cases.jsonl   # 합성 사례 303건 + 담당자 디렉터리 1줄 (약 1MB)
+├── data/processed/insurance_it_cases.jsonl   # 합성 사례 303건 + 담당자 디렉터리(13개 팀) 1줄 (약 1MB)
 ├── indexes/                                  # FAISS 인덱스 + 메타데이터
 │   ├── workcases.faiss
 │   ├── metadata.jsonl
 │   └── manifest.json
-├── src/workcase_agent/search.py              # 검색 핵심 로직
 ├── scripts/
 │   ├── ask.py            # 질의 → 유사 사례 검색 (메인 진입점)
 │   ├── show_case.py      # 사례 ID → 상세
 │   ├── create_index.py   # 인덱스 (재)생성
 │   ├── prepare_cases.py  # 데이터 → 사례 변환
-│   └── make_report.py    # HTML 보고서 (선택)
+│   ├── make_report.py    # HTML 보고서 (선택)
+│   └── build_web_demo.py # 웹 데모(web/index.html) 빌드
+├── app.py                # Streamlit 웹 앱 (파이썬 검색·판정·라우팅 + LLM 답변)
+├── src/workcase_agent/
+│   ├── search.py         # 검색·약한 매칭 판정·담당자 라우팅
+│   ├── llm.py            # LLM 어댑터 (Claude / GPT / Gemini / Groq)
+│   └── answer.py         # 답변 프롬프트·LLM 없을 때의 보고서
+├── scripts/deploy_space.py   # Hugging Face Spaces 배포
+├── web/template.html     # 정적 웹 데모 템플릿 (검색·라우팅 로직 JS + UI)
+├── docs/index.html       # 정적 웹 데모 빌드 결과 — GitHub Pages 가 서빙
 └── skill/                                    # DeepWork 스킬 (선택 등록)
     ├── SKILL.md
     └── references/output_format.md
@@ -140,3 +177,53 @@ work-advisor/
 - 데이터는 **완전 합성(가상)** 이다. 특정 보험사의 실제 규정·시스템·결재선이 아니다.
   실제 신청서명·결재선·설치 프로그램은 사내 규정으로 최종 확인해야 한다.
 - 답변 문장 생성은 채팅 에이전트가 수행한다. CLI 단독으로는 "유사 사례 검색 결과"까지 제공한다.
+
+## 9. 웹 앱 배포 (Hugging Face Spaces, 파이썬 그대로 실행)
+
+`app.py` 는 이 저장소의 검색·판정·라우팅 코드를 그대로 실행하는 Streamlit 앱이다. 맞는 사례가 있을 때만
+LLM 으로 답변 문장을 만들고, LLM 은 `src/workcase_agent/llm.py` 어댑터가 키 종류에 따라 고른다.
+
+| Secrets 에 넣는 키 | 사용 모델 (기본값) | 비고 |
+|---|---|---|
+| `GEMINI_API_KEY` | gemini-3.8-flash | 무료 티어 가능 (aistudio.google.com) |
+| `GROQ_API_KEY` | llama-3.3-70b-versatile | 무료 티어 가능 |
+| `ANTHROPIC_API_KEY` | claude-sonnet-5 | 종량제 |
+| `OPENAI_API_KEY` | gpt-5-mini | 종량제 |
+| (없음) | — | 상위 사례 필드를 그대로 정리한 보고서 출력 |
+
+`LLM_PROVIDER` / `LLM_MODEL` 변수로 제공자·모델을 강제할 수 있다. 키는 코드·저장소에 넣지 않고 Space Secrets 로만 전달한다.
+
+```bash
+# 로컬 실행
+pip install streamlit && streamlit run app.py
+
+# Hugging Face Spaces 배포 (무료 CPU 티어, 본인 터미널에서)
+export HF_TOKEN=hf_...          # Write 권한 토큰
+export GEMINI_API_KEY=...       # 쓰려는 LLM 키 하나
+python scripts/deploy_space.py <HF계정>/work-advisor
+```
+
+Space 는 무료 티어에서 48시간 미사용 시 잠들며, 깨어날 때 모델 로딩으로 1~2분 걸린다.
+
+## 10. 정적 웹 데모 (브라우저 안 JS 복제본)
+
+`docs/index.html` 은 사례 303건과 담당자 디렉터리를 내장한 단일 HTML 이다(소스: `web/template.html`). 두 곳에 배포한다.
+
+| 배포 | 링크 | 동작 |
+|---|---|---|
+| GitHub Pages (공개, 로그인 불필요) | https://yerankim.github.io/work-advisor-demo/ | 사례 검색(BM25) + 담당자 연결 + 상위 사례 필드 정리. 파이썬은 실행되지 않고 같은 규칙을 JS 로 옮긴 복제본 |
+| claude.ai Artifact (claude.ai 로그인 필요) | https://claude.ai/code/artifact/49af41f2-d655-4e48-b4f5-a56ea2fe04fa | 위 기능 + 뷰어의 Claude 로 판정·답변 문장 생성 (뷰어 사용량 소모, API 키 불필요) |
+
+- 검색: 브라우저 안에서 BM25(한글 조사 제거 + 2음절 조각)로 후보 사례를 찾는다. 임베딩 모델은 쓰지 않는다.
+- 판정: 사례 DB 밖 영역 키워드 규칙(A 단계) → 페이지를 연 뷰어의 Claude 가 "후보가 같은 업무 유형인가"를 판정.
+- 출력: 맞는 사례가 있으면 Claude 가 5개 섹션 답변을 생성하고, 없으면 담당 팀 카드(팀·연락처·접수 채널·담당 업무)를
+  디렉터리 값 그대로 보여준다. Claude 를 쓸 수 없는 환경에서는 검색 전용 모드로 상위 사례 필드를 정리해 보여준다.
+
+```bash
+python scripts/build_web_demo.py     # 데이터/템플릿을 바꿨을 때 재빌드 → docs/index.html
+bash scripts/deploy_pages.sh https://github.com/<계정>/work-advisor-demo.git   # GitHub Pages 저장소로 푸시
+```
+
+GitHub Pages 는 github.com/new 에서 공개 저장소를 만든 뒤 위 스크립트로 푸시하고, 저장소 Settings > Pages 에서
+Branch 를 `main` / `(root)` 로 지정하면 1~2분 뒤 열린다.
+
