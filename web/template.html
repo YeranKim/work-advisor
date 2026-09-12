@@ -118,6 +118,10 @@ details.dir[open] summary::before{transform:rotate(45deg)}
 .md th{background:var(--surface-2);font-weight:600}
 .md .tbl{overflow-x:auto}
 .md strong{font-weight:600}
+.typing::after{content:"▍";color:var(--primary);animation:blink 1s infinite;margin-left:1px}
+.reveal{animation:rise .35s ease-out both}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.typing::after{animation:none}.reveal{animation:none}}
 
 .handoff-card{border:1px solid var(--handoff);border-radius:var(--radius);background:var(--handoff-soft);padding:16px 18px;display:grid;grid-template-columns:1fr;gap:10px;margin:12px 0 8px}
 .handoff-card .eyebrow{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--handoff-ink)}
@@ -482,6 +486,27 @@ function md(text) {
   return html;
 }
 
+/* ───────── 타자 효과 (검색 전용 모드에서도 LLM 스트리밍처럼 보이게) ───────── */
+const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function typeOut(box, text, render, signal, opts) {
+  const o = Object.assign({ step: 3, delay: 14 }, opts || {});
+  if (REDUCED_MOTION) { box.innerHTML = render(text); return; }
+  box.classList.add('typing');
+  let i = 0;
+  while (i < text.length) {
+    if (signal && signal.aborted) break;
+    i = Math.min(text.length, i + o.step);
+    box.innerHTML = render(text.slice(0, i));
+    // 줄바꿈·문장 끝에서는 잠깐 멈춰 사람이 읽는 리듬을 만든다
+    const ch = text[i - 1];
+    await sleep(ch === '\n' ? o.delay * 4 : (ch === '.' || ch === '다' ? o.delay * 2 : o.delay));
+  }
+  box.innerHTML = render(text);
+  box.classList.remove('typing');
+}
+function reveal(el) { el.classList.add('reveal'); return el; }
+
 /* ───────── 결정적(LLM 없이) 사례 보고서 — 검색 전용 모드용 ───────── */
 function caseReport(query, cases, related) {
   const top = cases[0];
@@ -584,12 +609,14 @@ async function submit(q) {
   try {
     /* 1. 검색 */
     setStep(card, 'search', 'active', '후보 검색 중');
-    await new Promise(r => setTimeout(r, 120));
+    await sleep(REDUCED_MOTION ? 0 : 350);
     const cands = searchCases(q, 8);
     setStep(card, 'search', 'done', `후보 ${cands.length}건`);
 
     /* 2. 판정 — A) 사례 DB 밖 영역 키워드 규칙이 먼저 */
     setStep(card, 'judge', 'active', '업무 유형 확인 중');
+    body.innerHTML = '<div class="thinking"><i></i>후보 사례가 질문의 업무 유형과 맞는지 확인하는 중…</div>';
+    await sleep(REDUCED_MOTION ? 0 : 450);
     let decision;
     const forced = directoryOnlyRoute(q);
     if (forced) {
@@ -623,6 +650,11 @@ async function submit(q) {
       const stepOut = card.querySelector('[data-step="out"]'); stepOut.classList.add('handoff');
       setStep(card, 'out', 'done', decision.contact.team, '담당자 연결');
       body.innerHTML = handoffHtml(decision.contact, decision.one_liner, decision.clarify, null);
+      const leadEl = body.querySelector('.lead'), cardEl = body.querySelector('.handoff-card'), clarEl = body.querySelector('.clarify');
+      cardEl.hidden = true; clarEl.hidden = true;
+      await typeOut(leadEl, decision.one_liner, esc, ctl.signal, { step: 2, delay: 18 });
+      cardEl.hidden = false; reveal(cardEl); await sleep(REDUCED_MOTION ? 0 : 250);
+      clarEl.hidden = false; reveal(clarEl);
       card.appendChild(el('div', '', evidenceHtml(cands, [], routeReasonHtml(decision.contact, decision.reason))).firstElementChild);
       answerText = `${decision.one_liner} 담당: ${decision.contact.team} (${decision.contact.contact}, ${decision.contact.channel})`;
       if (sample) {
@@ -643,9 +675,11 @@ async function submit(q) {
         answerText = r.text; mdBox.innerHTML = md(r.text);
         if (r.truncated) body.appendChild(el('div', 'notice info', '답변이 길어 일부가 잘렸습니다. 질문을 나눠서 다시 물어보세요.'));
       } else {
-        setStep(card, 'out', 'active', '사례 요약 중');
+        setStep(card, 'out', 'active', '절차 정리 중');
         answerText = caseReport(q, cases, decision.related);
-        body.innerHTML = `<div class="md">${md(answerText)}</div><div class="notice info" style="margin-top:10px">검색 전용 모드: 상위 사례의 필드를 그대로 정리했습니다.${offReason ? ' ' + esc(offReason) + '.' : ''}</div>`;
+        const mdBox = el('div', 'md'); body.innerHTML = ''; body.appendChild(mdBox);
+        await typeOut(mdBox, answerText, md, ctl.signal);
+        body.appendChild(reveal(el('div', 'notice info', `검색 전용 모드: 상위 사례의 필드를 그대로 정리했습니다.${offReason ? ' ' + esc(offReason) + '.' : ''}`))).style.marginTop = '10px';
       }
       setStep(card, 'out', 'done', '완료');
       card.appendChild(el('div', '', evidenceHtml(cands, decision.case_ids, '')).firstElementChild);
