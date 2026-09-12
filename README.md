@@ -9,8 +9,8 @@
 맞는 사례가 없거나(약한 매칭) 사례로 답할 업무가 아닌 요청(정책 변경·성능 튜닝 의뢰 등)은
 **담당 팀·연락처·접수 채널**을 안내한다. 담당자 디렉터리는 13개 팀이다(사례 카테고리 11개 + 사례 DB 에 없는 영역 2개).
 
-> **웹 데모** — https://yerankim.github.io/work-advisor-demo/ (브라우저 전용 정적 버전, 9장)
-> **기술 정리 문서** — https://yerankim.github.io/work-advisor-demo/tech.html
+> **웹 데모** — https://yerankim.github.io/work-advisor/ (브라우저 전용 정적 버전, 9장)
+> **기술 정리 문서** — https://yerankim.github.io/work-advisor/tech.html
 
 ---
 
@@ -156,10 +156,12 @@ work-advisor/
 │   ├── create_index.py   # 인덱스 (재)생성
 │   ├── prepare_cases.py  # 데이터 → 사례 변환
 │   ├── make_report.py    # HTML 보고서 (선택)
-│   ├── build_web_demo.py # 정적 웹 데모(docs/index.html) 빌드
-│   └── deploy_pages.sh   # 정적 웹 데모를 GitHub Pages 저장소로 푸시
+│   └── build_web_demo.py # 정적 웹 데모(docs/index.html) 빌드
 ├── web/template.html     # 정적 웹 데모 템플릿 (검색·라우팅 로직 JS + UI)
-├── docs/index.html       # 정적 웹 데모 빌드 결과 (GitHub Pages)
+├── docs/                 # GitHub Pages 로 서빙 (main 브랜치 /docs)
+│   ├── index.html        # 정적 웹 데모 빌드 결과
+│   ├── tech.html         # 기술 정리 문서 (+ demo.mp4 시연 영상)
+│   └── work-advisor-presentation.html  # 발표 슬라이드
 └── skill/                                    # DeepWork 스킬 (선택 등록)
     ├── SKILL.md
     └── references/output_format.md
@@ -185,7 +187,7 @@ work-advisor/
 
 | 배포 | 링크 | 동작 |
 |---|---|---|
-| GitHub Pages (공개, 로그인 불필요) | https://yerankim.github.io/work-advisor-demo/ | 사례 검색(BM25) + 담당자 연결 + 상위 사례 필드 정리. 파이썬은 실행되지 않고 같은 규칙을 JS 로 옮긴 복제본 |
+| GitHub Pages (공개, 로그인 불필요) | https://yerankim.github.io/work-advisor/ | 사례 검색(BM25) + 담당자 연결 + 상위 사례 필드 정리. 파이썬은 실행되지 않고 같은 규칙을 JS 로 옮긴 복제본 |
 | claude.ai Artifact (claude.ai 로그인 필요) | https://claude.ai/code/artifact/49af41f2-d655-4e48-b4f5-a56ea2fe04fa | 위 기능 + 뷰어의 Claude 로 판정·답변 문장 생성 (뷰어 사용량 소모, API 키 불필요) |
 
 - 검색: 브라우저 안에서 BM25(한글 조사 제거 + 2음절 조각)로 후보 사례를 찾는다. 임베딩 모델은 쓰지 않는다.
@@ -194,10 +196,7 @@ work-advisor/
   디렉터리 값 그대로 보여준다. Claude 를 쓸 수 없는 환경에서는 검색 전용 모드로 상위 사례 필드를 정리해 보여준다.
 
 ```bash
-python scripts/build_web_demo.py     # 데이터/템플릿을 바꿨을 때 재빌드 → docs/index.html
-bash scripts/deploy_pages.sh https://github.com/<계정>/work-advisor-demo.git   # GitHub Pages 저장소로 푸시
+python scripts/build_web_demo.py     # 데이터/템플릿을 바꿨을 때 재빌드 → docs/index.html, 커밋·푸시하면 Pages 에 반영
 ```
 
-GitHub Pages 는 github.com/new 에서 공개 저장소를 만든 뒤 위 스크립트로 푸시하고, 저장소 Settings > Pages 에서
-Branch 를 `main` / `(root)` 로 지정하면 1~2분 뒤 열린다.
-
+GitHub Pages 는 이 저장소 Settings > Pages 에서 Branch 를 `main` / `/docs` 로 지정해 서빙한다.

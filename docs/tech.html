@@ -1,0 +1,441 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Work Advisor 기술 정리 문서</title>
+<style>
+@page { size: A4; margin: 20mm 18mm; }
+body { max-width: 860px; padding: 40px 24px; margin: 0 auto !important; background:#fff; font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif; color:#111; font-size:10.5pt; line-height:1.6; margin:0; }
+h1 { font-size:20pt; margin:0 0 8px; }
+h2 { font-size:13.5pt; margin:24px 0 8px; padding-bottom:4px; border-bottom:1px solid #999; page-break-after:avoid; }
+h3 { font-size:11pt; margin:14px 0 4px; page-break-after:avoid; }
+p { margin:4px 0; }
+ul, ol { margin:3px 0 6px; padding-left:22px; }
+li { margin:1px 0; }
+blockquote { margin:8px 0; padding:6px 12px; border-left:3px solid #999; color:#333; background:#f7f7f7; page-break-inside:avoid; }
+blockquote p { margin:2px 0; }
+hr { display:none; }
+table { border-collapse:collapse; width:100%; margin:6px 0 10px; font-size:10pt; page-break-inside:avoid; }
+th, td { border:1px solid #bbb; padding:5px 9px; vertical-align:top; text-align:left; }
+th { background:#eee; }
+code { font-family:"D2Coding","Noto Sans Mono CJK KR","Apple SD Gothic Neo","Malgun Gothic",monospace; background:#f0f0f0; padding:1px 4px; border-radius:2px; font-size:9.5pt; }
+pre { background:#f7f7f7; border:1px solid #ddd; padding:9px 12px; font-size:9.5pt; line-height:1.4; page-break-inside:avoid; }
+pre code { background:none; padding:0; font-size:9.5pt; }
+</style></head><body><h1>Work Advisor 기술 정리 문서</h1>
+<blockquote>
+<p>보험사 사내 IT 업무를 "과거 사례"로 찾아 답해 주는 검색 도우미(Agent)<br />
+프로젝트 전체를 이해할 수 있게 정리한 문서<br />
+시연 영상: 아래 재생 (1분 53초, 실제 질문 → 사례 검색 → 답변 과정)</p>
+</blockquote><table style="margin:10px 0 14px"><thead><tr><th>바로 가기</th><th>링크</th><th>설명</th></tr></thead><tbody>
+<tr><td>웹 데모</td><td><a href="https://yerankim.github.io/work-advisor/">yerankim.github.io/work-advisor</a></td><td>로그인 없이 바로 질문. 사례 검색·담당자 연결이 브라우저 안에서 동작</td></tr>
+<tr><td>답변 생성 버전</td><td><a href="https://claude.ai/code/artifact/49af41f2-d655-4e48-b4f5-a56ea2fe04fa">claude.ai 링크</a></td><td>같은 페이지에 Claude 답변 문장 생성을 더한 버전 (claude.ai 로그인 필요, 여는 사람의 계정 사용)</td></tr>
+<tr><td>소스 코드</td><td><a href="https://github.com/YeranKim/work-advisor">github.com/YeranKim/work-advisor</a></td><td>파이썬 검색·판정·라우팅 코드, 데이터, 스킬 문서</td></tr>
+</tbody></table><p><video controls preload="metadata" style="width:100%;max-width:860px;border:1px solid #ddd;margin:8px 0 4px" src="demo.mp4"></video></p>
+<hr />
+<h2>1. 한 문장 요약</h2>
+<p><strong>"사내 IT 업무 질문을 하면, 비슷한 과거 처리 사례를 찾아서 '이렇게 하면 됩니다'라고 알려주는 검색 도우미"</strong></p>
+<p>사용 예시</p>
+<ul>
+<li>질문: "계약계 DB 조회 계정 발급은 어떻게 신청하나요?"</li>
+<li>도우미: 과거에 똑같은 일을 처리했던 사례를 찾아서 → 필요한 서류, 결재 순서, 처리 절차, 주의사항을 정리해 답변</li>
+</ul>
+<p>즉, 사람이 매번 "이건 누구한테 신청하지? 무슨 서류가 필요하지?"를 고민하지 않도록, <strong>과거 경험(사례)을 대신 기억하고 찾아주는 시스템</strong></p>
+<hr />
+<h2>2. 해결하려는 문제</h2>
+<p>회사 IT 업무는 종류가 아주 많음. 계정 발급, VPN 신청, 방화벽 오픈, 프로그램 설치, 장애 처리... 각각 필요한 서류와 결재선이 다 다름</p>
+<ul>
+<li>신입/담당자는 "이 업무는 어떻게 처리하지?"를 매번 물어봐야 함</li>
+<li>답을 아는 사람은 같은 질문에 계속 답해야 함</li>
+</ul>
+<p>→ <strong>과거에 실제로 처리했던 사례 303건을 쌓아 두고</strong>, 새 질문이 들어오면 그중 가장 비슷한 사례를 찾아 답의 근거로 씀</p>
+<blockquote>
+<p>참고: 지금 들어있는 사례 303건은 시연을 위해 만든 <strong>가상(합성) 데이터</strong>. 실제 회사 데이터로 바꾸면 그대로 실무에 쓸 수 있는 구조</p>
+</blockquote>
+<hr />
+<h2>3. 어떤 질문에 답할 수 있나요? (11개 업무 영역)</h2>
+<p>과거 사례는 11개 IT 업무 영역으로 구분 (괄호 안은 현재 사례 개수)</p>
+<table>
+<thead>
+<tr>
+<th>업무 영역</th>
+<th>사례 수</th>
+<th>예시 질문</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DB 계정·권한</td>
+<td>28</td>
+<td>"운영 DB 조회 계정 발급"</td>
+</tr>
+<tr>
+<td>사내 계정·그룹웨어</td>
+<td>28</td>
+<td>"퇴직자 계정 회수"</td>
+</tr>
+<tr>
+<td>VPN·원격접속</td>
+<td>28</td>
+<td>"재택 VPN 신청"</td>
+</tr>
+<tr>
+<td>프로그램 설치</td>
+<td>27</td>
+<td>"개발 IDE 설치"</td>
+</tr>
+<tr>
+<td>서버 접근·작업</td>
+<td>27</td>
+<td>"운영 서버 SSH 접근"</td>
+</tr>
+<tr>
+<td>방화벽·네트워크</td>
+<td>27</td>
+<td>"방화벽 포트 오픈"</td>
+</tr>
+<tr>
+<td>배포·변경관리</td>
+<td>27</td>
+<td>"운영 배포 변경 신청"</td>
+</tr>
+<tr>
+<td>배치·인터페이스 장애</td>
+<td>27</td>
+<td>"야간 배치 실패"</td>
+</tr>
+<tr>
+<td>개인정보·데이터 추출</td>
+<td>27</td>
+<td>"고객정보 추출 승인"</td>
+</tr>
+<tr>
+<td>인증서·암호화키</td>
+<td>27</td>
+<td>"SSL 인증서 갱신"</td>
+</tr>
+<tr>
+<td>IT 장애·문의</td>
+<td>30</td>
+<td>"보안접속 에이전트 끊김"</td>
+</tr>
+</tbody>
+</table>
+<p>전체 <strong>303건 + 담당자 연락처 정보 1건 = 총 304줄</strong>의 데이터</p>
+<p>각 사례의 상태는 아래 중 하나</p>
+<ul>
+<li><strong>완료</strong> (155건): 정상 처리됨</li>
+<li><strong>보완 후 완료</strong> (47건): 서류가 빠져 보완한 뒤 처리됨</li>
+<li><strong>반려</strong> (54건): 요건 부족으로 거절됨 → "이러면 반려된다"는 교훈으로 활용</li>
+<li><strong>진행 중</strong> (47건): 아직 처리 중</li>
+</ul>
+<hr />
+<h2>4. 전체 그림 (데이터가 어떻게 흘러가나)</h2>
+<pre><code>[사용자 질문]
+     │
+     ▼
+[ ask.py ]  ← 검색을 실행하는 입구(명령어)
+     │
+     ▼
+[ search.py ]  ← 실제로 사례를 찾는 두뇌
+     │  ┌───────────────┐
+     │  │ ① 벡터 검색 (의미로 찾기)   │
+     │  │ ② BM25 검색 (키워드로 찾기) │
+     │  │ ③ 두 점수를 합쳐 순위 결정  │
+     │  └───────────────┘
+     ▼
+[ 가장 비슷한 사례 Top 5 ] + [ 이게 믿을 만한지 판정(weak_match) ]
+     │
+     ▼
+[ 채팅 도우미가 사례를 근거로 답변 작성 ]
+</code></pre>
+<hr />
+<h2>5. 핵심 기술 : 하이브리드 검색</h2>
+<p>가장 중요한 부분. 사례를 찾을 때 <strong>두 가지 방법을 동시에</strong> 씀</p>
+<h3>방법 A. 벡터 검색 (의미로 찾기)</h3>
+<ul>
+<li>문장의 <strong>뜻</strong>을 숫자 묶음(벡터)으로 바꿔서, 뜻이 비슷한 사례를 찾음</li>
+<li>단어가 달라도 의미가 같으면 잡아냄</li>
+<li>예: "로그인 안 됨" ↔ "인증 실패" → 단어는 다르지만 같은 뜻으로 인식</li>
+<li>사용 모델: <code>intfloat/multilingual-e5-base</code> (여러 언어를 이해하는 문장 임베딩 모델)</li>
+<li>빠른 검색을 위해 <strong>FAISS</strong> 벡터 검색 엔진 사용</li>
+</ul>
+<h3>방법 B. BM25 검색 (키워드로 찾기)</h3>
+<ul>
+<li>질문에 나온 <strong>정확한 단어</strong>가 사례에 얼마나 겹치는지로 찾음</li>
+<li>약어나 시스템 이름에 강함</li>
+<li>예: "TLS", "SSH", "VPN" 같은 정확한 용어</li>
+</ul>
+<h3>왜 둘 다 쓰나?</h3>
+<ul>
+<li>벡터만 쓰면: 뜻은 잘 잡지만, 정확한 약어를 놓칠 수 있음</li>
+<li>BM25만 쓰면: 단어가 다르면 못 찾음</li>
+<li><strong>둘을 합치면</strong> 서로의 약점을 메워 줌</li>
+</ul>
+<h3>두 점수를 합치는 방법</h3>
+<p>각 점수를 0~1 사이로 맞춘(정규화한) 뒤, 가중치를 곱해서 더함</p>
+<pre><code>최종점수 = (벡터점수 × 0.6) + (BM25점수 × 0.4)
+</code></pre>
+<p>벡터 검색이 더 똑똑해서 비중(0.6)을 조금 더 줌</p>
+<hr />
+<h2>6. "엉뚱한 답"을 막는 안전장치 (weak_match)</h2>
+<p>검색은 항상 "가장 비슷한 것"을 돌려줌. 문제는, <strong>정답이 없어도 억지로 뭔가를 돌려준다</strong>는 점</p>
+<p>예를 들어 "사원증 발급"은 IT 업무 사례에 없는데도, 검색은 그나마 비슷해 보이는 걸 내놓음. 이걸 그대로 답하면 <strong>틀린 안내</strong>가 됨</p>
+<p>그래서 "이 검색 결과를 믿어도 되는가?"를 판정하는 게이트를 둠. 이름은 <code>weak_match</code>(약한 매칭)</p>
+<p>아래 <strong>셋 중 하나라도</strong> 해당하면 <code>weak_match = true</code> (믿을 수 없음)로 판정</p>
+<ol>
+<li>검색 결과가 아예 없음</li>
+<li>1위 사례의 <strong>의미 유사도(벡터 점수)가 0.83 미만</strong> → 뜻이 별로 안 비슷함</li>
+<li>1위 사례의 <strong>키워드 매칭이 바닥(0.05 미만)</strong>이거나, <strong>변별력 있는 질문 단어가 1위 사례에 하나도 없음</strong> → 문장 형식만 비슷하고 실제 단어가 안 맞음. "절차"·"신청"처럼 거의 모든 사례에 나오는 단어는 세지 않음 (예: "사원증 재발급 절차를 알려줘"는 "절차"만 겹치므로 약한 매칭)</li>
+</ol>
+<p><code>weak_match = true</code>이면 → 사례로 절차를 지어내지 않고, <strong>"맞는 사례가 없습니다"라고 밝힌 뒤 담당자 연락처를 안내</strong></p>
+<blockquote>
+<p>2번과 3번의 차이가 핵심<br />
+벡터 점수는 "문장 구조가 비슷"하기만 해도 높게 나올 때가 있음(오탐). 그럴 때 키워드 매칭(3번)이 0에 가까우면 "사실은 관련 없는 사례"라고 걸러냄. 하이브리드 검색을 안전장치로도 활용하는 부분</p>
+</blockquote>
+<hr />
+<h2>7. 답을 못 찾으면? (담당자 라우팅)</h2>
+<p><code>weak_match</code>가 뜨면 사례로 절차를 지어내지 않고, 데이터에 저장된 <strong>담당자 디렉터리</strong>에서 맞는 팀을 골라 연락처·접수 채널을 안내</p>
+<ul>
+<li>디렉터리는 데이터 파일 맨 끝의 특수한 한 줄(<code>record_type: contacts</code>)에 있음. 사례 영역 11개 팀 + 사례 DB에 없는 영역 2개 팀(성능·튜닝, 인증·세션 정책) = 13개 팀</li>
+<li>팀마다 <code>keywords</code>가 있음. <code>재인증+주기</code>처럼 <code>+</code>로 이은 항목은 질문에 조각이 모두 들어 있을 때만 일치</li>
+</ul>
+<p>판정 순서 (<code>search.py</code>의 <code>route_contact()</code>)</p>
+<table><thead><tr><th>단계</th><th>조건</th><th>결과</th></tr></thead><tbody>
+<tr><td>A. 사례 DB 밖 영역</td><td>성능·튜닝, 인증·세션 정책 팀의 키워드가 질문에 일치</td><td>검색 결과가 그럴듯해 보여도 <code>weak_match = true</code>로 승격하고 그 팀 안내</td></tr>
+<tr><td>B. 약한 매칭</td><td>6장의 세 조건 중 하나</td><td>키워드 일치 팀 → 담당 업무 설명과의 임베딩 유사도가 0.82 이상이고 2위 팀보다 뚜렷이 높은 팀 → 기본 창구(IT 서비스데스크, 내선 1234) 순</td></tr>
+<tr><td>C. 정상 매칭</td><td>그 외</td><td>사례로 절차 안내 + 1위 사례 영역의 담당 팀을 "추가 문의처"로 첨부</td></tr>
+</tbody></table>
+<blockquote>
+<p>A단계가 필요한 이유<br />
+"MFA 세션의 재인증 주기를 늘리려면?"은 '세션 만료로 끊김' 장애 사례와 벡터 유사도가 0.87로 높게 나와 6장의 게이트를 통과함. 하지만 장애 처리가 아니라 정책 변경 요청이므로, 키워드 규칙이 먼저 걸러 인증인프라팀(내선 3320)으로 연결</p>
+</blockquote>
+<p>→ "모르는 걸 아는 척"하지 않고, 정확히 담당자에게 넘김</p>
+<hr />
+<h2>8. 파일 구조 (무엇이 어디에 있나)</h2>
+<pre><code>work-advisor/
+├── data/processed/
+│   └── insurance_it_cases.jsonl   ← 사례 데이터 (한 줄 = 사례 1건, 총 304줄)
+│
+├── indexes/                        ← 검색을 빠르게 하려고 미리 만들어 둔 색인
+│   ├── workcases.faiss             ← 벡터 색인 (뜻 검색용)
+│   ├── metadata.jsonl              ← 색인과 사례를 연결하는 정보
+│   └── manifest.json               ← 색인 설정 기록 (모델명, 차원 768 등)
+│
+├── src/workcase_agent/
+│   └── search.py                   ← 핵심 두뇌: 하이브리드 검색 + weak_match 판정 + 담당자 라우팅
+│
+├── scripts/
+│   ├── ask.py                      ← 검색 실행 입구 (질문 → 결과)
+│   ├── show_case.py                ← 특정 사례 1건 상세 보기
+│   ├── create_index.py             ← 색인 새로 만들기
+│   ├── prepare_cases.py            ← 원본 데이터 다듬기
+│   ├── make_report.py              ← 결과를 보고서로 만들기
+│   └── build_web_demo.py           ← 웹 데모(docs/index.html) 빌드
+│
+├── web/template.html               ← 웹 데모 템플릿 (검색·라우팅을 JS로 옮긴 브라우저 버전)
+│
+├── skill/
+│   ├── SKILL.md                    ← 채팅 도우미가 따르는 사용 설명서
+│   └── references/output_format.md ← 답변 형식 규칙
+│
+├── docs/
+│   ├── index.html                  ← 웹 데모 (GitHub Pages)
+│   └── work-advisor-presentation.html  ← 발표용 슬라이드
+│
+├── requirements.txt                ← 필요한 파이썬 라이브러리 목록
+└── README.md                       ← 프로젝트 설명
+</code></pre>
+<hr />
+<h2>9. 파일별 역할</h2>
+<table>
+<thead>
+<tr>
+<th>파일</th>
+<th>하는 일</th>
+<th>비유</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>insurance_it_cases.jsonl</code></td>
+<td>모든 과거 사례를 담은 원본 데이터</td>
+<td>경험이 쌓인 <strong>사례집</strong></td>
+</tr>
+<tr>
+<td><code>create_index.py</code></td>
+<td>사례를 검색하기 좋게 색인으로 변환</td>
+<td>책에 <strong>찾아보기(색인)</strong> 만들기</td>
+</tr>
+<tr>
+<td><code>search.py</code></td>
+<td>질문을 받아 가장 비슷한 사례 찾기</td>
+<td>실제로 검색하는 <strong>사서</strong></td>
+</tr>
+<tr>
+<td><code>ask.py</code></td>
+<td>사용자가 질문을 넣는 창구</td>
+<td>사서에게 말을 거는 <strong>접수 창구</strong></td>
+</tr>
+<tr>
+<td><code>show_case.py</code></td>
+<td>특정 사례 하나를 자세히 보여줌</td>
+<td>책 한 권을 <strong>펼쳐 보기</strong></td>
+</tr>
+<tr>
+<td><code>SKILL.md</code></td>
+<td>채팅 도우미의 행동 규칙</td>
+<td>도우미의 <strong>업무 매뉴얼</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>10. 실행 방법</h2>
+<h3>준비 (최초 1회)</h3>
+<p>파이썬 가상환경을 만들고 라이브러리 설치</p>
+<pre><code>python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+</code></pre>
+<h3>질문하기</h3>
+<pre><code>venv/bin/python scripts/ask.py &quot;계약계 DB 조회 계정 발급은 어떻게 신청하나요?&quot; --top-k 5 --json
+</code></pre>
+<ul>
+<li><code>--top-k 5</code> : 가장 비슷한 사례 5건까지 보기</li>
+<li><code>--json</code> : 채팅 도우미가 읽기 좋은 형태(JSON)로 출력</li>
+<li><code>--category "VPN·원격접속"</code> : 특정 영역만 검색 (선택)</li>
+<li><code>--status "반려"</code> : 특정 상태만 검색 (선택)</li>
+</ul>
+<h3>특정 사례 자세히 보기</h3>
+<pre><code>venv/bin/python scripts/show_case.py SYN-IT-DBA-0001
+</code></pre>
+<h3>데이터를 바꿨을 때 (색인 다시 만들기)</h3>
+<pre><code>venv/bin/python scripts/create_index.py
+</code></pre>
+<blockquote>
+<p>데이터를 수정하면 반드시 색인을 다시 만들어야 검색이 정확함<br />
+(사례 개수와 벡터 개수가 일치해야 함)</p>
+</blockquote>
+<hr />
+<h2>11. 검색 결과에 들어 있는 필드</h2>
+<p>검색 결과 한 건에 들어 있는 정보</p>
+<table>
+<thead>
+<tr>
+<th>필드</th>
+<th>뜻</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>case_id</code></td>
+<td>사례 고유 번호 (예: SYN-IT-DBA-0001)</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>업무 영역</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>완료 / 보완 후 완료 / 반려 / 진행 중</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>사례 제목</td>
+</tr>
+<tr>
+<td><code>situation</code></td>
+<td>어떤 상황이었는지</td>
+</tr>
+<tr>
+<td><code>required_documents</code></td>
+<td>필요한 서류</td>
+</tr>
+<tr>
+<td><code>missing_document</code></td>
+<td>빠져서 문제가 됐던 서류 (있을 때만)</td>
+</tr>
+<tr>
+<td><code>approval_route</code></td>
+<td>결재 순서 (누가 → 누가)</td>
+</tr>
+<tr>
+<td><code>required_tools</code></td>
+<td>필요한 도구/프로그램</td>
+</tr>
+<tr>
+<td><code>pre_checks</code></td>
+<td>처리 전 확인 사항</td>
+</tr>
+<tr>
+<td><code>process_steps</code></td>
+<td>실제 처리 절차 (단계별)</td>
+</tr>
+<tr>
+<td><code>cautions</code></td>
+<td>주의사항</td>
+</tr>
+<tr>
+<td><code>outcome</code></td>
+<td>최종 결과</td>
+</tr>
+<tr>
+<td><code>score</code> / <code>vector_score</code> / <code>bm25_norm</code></td>
+<td>내부 검색 점수 (사용자에게는 보여주지 않음)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>마지막 점수 3개는 <strong>내부 판단용</strong>. 사용자에게 답할 때는 이런 숫자를 노출하지 않고, "맞는 사례가 있으면 절차 안내 / 없으면 담당자 안내"라는 결과만 자연스럽게 전달</p>
+</blockquote>
+<hr />
+<h2>12. 설계 원칙 (왜 이렇게 만들었나)</h2>
+<ol>
+<li><strong>지어내지 않는다</strong> — 사례에 있는 내용만 답하고, 없으면 "없다"고 말함</li>
+<li><strong>틀리느니 넘긴다</strong> — 확신이 없으면(weak_match) 담당자에게 안내</li>
+<li><strong>반려 사례도 자산</strong> — "이러면 거절된다"는 실패 경험도 주의사항으로 활용</li>
+<li><strong>내부 수치는 숨긴다</strong> — 점수·임계값 같은 기술 용어는 사용자에게 보이지 않음</li>
+<li><strong>영역을 한정 짓지 않는다</strong> — "이건 IT 범위 밖"이라고 단정하지 않고, 데이터에 맞는 사례가 있는지로만 판단</li>
+</ol>
+<hr />
+<h2>13. 용어집</h2>
+<table>
+<thead>
+<tr>
+<th>용어</th>
+<th>설명</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>임베딩 / 벡터</strong></td>
+<td>문장의 뜻을 숫자 묶음으로 바꾼 것. 뜻이 비슷하면 숫자도 비슷함</td>
+</tr>
+<tr>
+<td><strong>FAISS</strong></td>
+<td>수많은 벡터 중 비슷한 걸 빠르게 찾아주는 검색 엔진</td>
+</tr>
+<tr>
+<td><strong>BM25</strong></td>
+<td>단어(키워드)가 얼마나 겹치는지로 점수를 매기는 고전 검색 방식</td>
+</tr>
+<tr>
+<td><strong>하이브리드 검색</strong></td>
+<td>벡터(의미) + BM25(키워드)를 합친 검색</td>
+</tr>
+<tr>
+<td><strong>정규화(min-max)</strong></td>
+<td>서로 다른 점수를 0~1 사이로 맞춰 공정하게 비교하는 것</td>
+</tr>
+<tr>
+<td><strong>weak_match</strong></td>
+<td>"이 검색 결과 믿어도 되나?"를 판정하는 안전장치</td>
+</tr>
+<tr>
+<td><strong>폴백(fallback)</strong></td>
+<td>답을 못 찾았을 때 대신 담당자에게 안내하는 것</td>
+</tr>
+<tr>
+<td><strong>JSONL</strong></td>
+<td>한 줄에 하나의 데이터(JSON)가 들어있는 파일 형식</td>
+</tr>
+<tr>
+<td><strong>venv</strong></td>
+<td>이 프로젝트 전용으로 라이브러리를 격리해 설치하는 파이썬 가상환경</td>
+</tr>
+</tbody>
+</table></body></html>
