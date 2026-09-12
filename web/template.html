@@ -492,7 +492,7 @@ const SCENARIO = [
   ['3턴 · 정책 변경 요청처', 'MFA 세션의 재인증 주기를 늘리려면 어떻게 해야 해?'],
 ];
 const CHIPS = ['퇴직자 DB 계정 회수해야 하는데 절차 알려줘', '재택근무 VPN 신청 어떻게 해?', '운영 배포 롤백은 어떻게 해?',
-  '쿼리가 너무 느려서 실행계획 튜닝 받고 싶어', '회의실 예약은 어떻게 해?'];
+  '쿼리가 너무 느려서 실행계획 튜닝 받고 싶어', '사원증 재발급 절차를 알려줘', '회의실 예약은 어떻게 해?'];
 const scen = document.getElementById('scenario');
 SCENARIO.forEach(([lbl, q]) => { const b = document.createElement('button'); b.innerHTML = `<b>${esc(lbl)}</b>${esc(q)}`; b.onclick = () => submit(q); scen.appendChild(b); });
 const chips = document.getElementById('chips');
