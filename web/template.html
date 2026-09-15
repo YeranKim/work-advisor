@@ -499,24 +499,46 @@ function md(text) {
   return html;
 }
 
+/* ───────── 자동 스크롤 ─────────
+   답변이 길어지는 동안 화면이 따라 내려간다. 단, 사용자가 위로 올려 읽는 중이면(바닥에서 150px 이상)
+   따라가지 않는다. force 는 새 질문을 보낸 순간처럼 반드시 내려야 할 때만 쓴다. */
+let progTop = -1;     // 코드가 마지막으로 맞춘 스크롤 위치
+let userAway = false; // 사용자가 위로 올려 읽는 중인지
+// 바닥 근처로 돌아오면 다시 따라가기 시작한다 (우리가 시킨 스크롤도 여기로 들어와 플래그를 푼다)
+window.addEventListener('scroll', () => {
+  if (document.documentElement.scrollHeight - (window.scrollY + window.innerHeight) < 60) userAway = false;
+}, { passive: true });
+
+function follow(force) {
+  if (!force) {
+    // 우리가 맞춰 둔 위치보다 위에 있으면 사용자가 직접 올린 것이다 (스크롤 이벤트보다 확실한 판단)
+    if (progTop >= 0 && progTop - window.scrollY > 40) userAway = true;
+    if (userAway) return;
+  }
+  progTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  window.scrollTo(0, progTop);
+}
+
 /* ───────── 타자 효과 (검색 전용 모드에서도 LLM 스트리밍처럼 보이게) ───────── */
 const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function typeOut(box, text, render, signal, opts) {
   const o = Object.assign({ step: 3, delay: 14 }, opts || {});
-  if (REDUCED_MOTION) { box.innerHTML = render(text); return; }
+  if (REDUCED_MOTION) { box.innerHTML = render(text); follow(); return; }
   box.classList.add('typing');
   let i = 0;
   while (i < text.length) {
     if (signal && signal.aborted) break;
     i = Math.min(text.length, i + o.step);
     box.innerHTML = render(text.slice(0, i));
+    follow();
     // 줄바꿈·문장 끝에서는 잠깐 멈춰 사람이 읽는 리듬을 만든다
     const ch = text[i - 1];
     await sleep(ch === '\n' ? o.delay * 4 : (ch === '.' || ch === '다' ? o.delay * 2 : o.delay));
   }
   box.innerHTML = render(text);
   box.classList.remove('typing');
+  follow();
 }
 function reveal(el) { el.classList.add('reveal'); return el; }
 
@@ -633,7 +655,7 @@ async function submit(q) {
   suggest.classList.add('busy');
   const u = el('div', 'turn-user', `<span class="eyebrow">질문</span><div class="q">${esc(q)}</div>`); thread.appendChild(u);
   const card = el('div', 'card', stripHtml() + '<div class="body"><div class="thinking"><i></i>사례를 찾는 중…</div></div>');
-  thread.appendChild(card); card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  thread.appendChild(card); userAway = false; follow(true);
   const body = card.querySelector('.body');
   const history = historyText(turns);
   turns.push({ role: 'user', text: q });
@@ -690,8 +712,9 @@ async function submit(q) {
       const leadEl = body.querySelector('.lead'), cardEl = body.querySelector('.handoff-card'), clarEl = body.querySelector('.clarify');
       cardEl.hidden = true; clarEl.hidden = true;
       await typeOut(leadEl, decision.one_liner, esc, ctl.signal, { step: 2, delay: 18 });
-      cardEl.hidden = false; reveal(cardEl); await sleep(REDUCED_MOTION ? 0 : 250);
-      clarEl.hidden = false; reveal(clarEl);
+      // 카드가 한 번에 펼쳐지면 높이가 크게 늘어나므로, 바닥에 붙어 있었다면 강제로 따라 내려간다
+      cardEl.hidden = false; reveal(cardEl); follow(); await sleep(REDUCED_MOTION ? 0 : 250);
+      clarEl.hidden = false; reveal(clarEl); follow();
       card.appendChild(el('div', '', evidenceHtml(cands, [], routeReasonHtml(decision.contact, decision.reason))).firstElementChild);
       answerText = `${decision.one_liner} 담당: ${decision.contact.team} (${decision.contact.contact}, ${decision.contact.channel})`;
       if (sample) {
@@ -708,8 +731,8 @@ async function submit(q) {
         body.innerHTML = '<div class="thinking"><i></i>사례를 근거로 절차를 정리하는 중…</div>';
         const mdBox = el('div', 'md'); let shown = false;
         const r = await sample(answerPrompt(q, cases, decision.related, history), { signal: ctl.signal, cache: false,
-          onText: ({ text }) => { if (!shown) { body.innerHTML = ''; body.appendChild(mdBox); shown = true; } mdBox.innerHTML = md(text); } });
-        answerText = r.text; mdBox.innerHTML = md(r.text);
+          onText: ({ text }) => { if (!shown) { body.innerHTML = ''; body.appendChild(mdBox); shown = true; } mdBox.innerHTML = md(text); follow(); } });
+        answerText = r.text; mdBox.innerHTML = md(r.text); follow();
         if (r.truncated) body.appendChild(el('div', 'notice info', '답변이 길어 일부가 잘렸습니다. 질문을 나눠서 다시 물어보세요.'));
       } else {
         setStep(card, 'out', 'active', '절차 정리 중');
@@ -732,7 +755,7 @@ async function submit(q) {
     turns.push({ role: 'assistant', text: answerText });
     running = false; askBtn.disabled = false; stopBtn.hidden = true; ctl = null;
     answered++; suggest.classList.remove('busy'); renderSuggest(true);
-    card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    follow();   // 근거 사례·추천 줄이 붙어 높이가 변한 만큼 한 번 더 맞춘다
   }
 }
 })();
