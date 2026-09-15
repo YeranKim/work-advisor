@@ -114,6 +114,7 @@ python scripts/ask.py "질문" --top-k 4 --json
 | 단계 | 조건 | 결과 |
 |---|---|---|
 | A. 디렉터리 전용 영역 | 사례 DB 에 없는 팀(성능·튜닝, 인증·세션 정책)의 키워드 규칙이 질의에 일치 | `weak_match: true`, `weak_reason: directory_only_topic`, 해당 팀 |
+| A-2. 사내 IT 사례가 아닌 요청 | 기본 창구의 키워드(사원증·회의실·명함 등)가 질의에 일치 | `weak_match: true`, `weak_reason: no_matching_case`, IT 서비스데스크 |
 | B. 약한 매칭 | 결과 없음 OR 1위 벡터 유사도 < 0.83 OR 키워드 미매칭(1위 bm25_norm < 0.05, 또는 변별력 있는 질의 키워드가 1위 사례에 하나도 없음) | 키워드 일치 팀 → 담당 업무 설명과의 임베딩 유사도가 0.82 이상이고 2위 팀보다 0.02 이상 높은 팀 → 기본 창구 순 |
 | C. 정상 매칭 | 그 외 | `contact: null`, `related_contact` 에 1위 사례 카테고리 담당 팀 |
 

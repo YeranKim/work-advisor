@@ -50,13 +50,16 @@ button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px so
 .pill.off .dot{background:var(--warn)}
 
 .rail h2{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px}
-.scenario{display:flex;flex-direction:column;gap:6px}
-.scenario button{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;line-height:1.4;font-size:13.5px;transition:border-color .15s,background .15s}
-.scenario button:hover{border-color:var(--primary);background:var(--primary-soft)}
-.scenario button b{display:block;font-size:11px;color:var(--primary);font-weight:600;letter-spacing:.04em;margin-bottom:2px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:4px 11px;font-size:12.5px;color:var(--ink-2)}
 .chips button:hover{border-color:var(--primary);color:var(--primary)}
+.suggest{max-width:860px;margin:0 auto 9px;display:flex;flex-wrap:nowrap;gap:7px;align-items:center;overflow-x:auto;scrollbar-width:none;transition:opacity .2s}
+.suggest::-webkit-scrollbar{display:none}
+.suggest.busy{opacity:.35;pointer-events:none}
+.suggest .lead-label{flex:none;white-space:nowrap;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:1px}
+.suggest button{flex:none;white-space:nowrap;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;font-size:13.5px;line-height:1.35;color:var(--ink-2);transition:border-color .15s,background .15s,color .15s}
+.suggest button:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-soft)}
+.suggest button.next{border-color:var(--primary);background:var(--primary-soft);color:var(--primary-soft-ink);font-weight:500}
 
 .flow{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;counter-reset:step}
 .flow li{position:relative;padding-left:30px;font-size:13px;color:var(--ink-2)}
@@ -164,7 +167,8 @@ details.ev summary .cnt{font-size:11.5px;color:var(--muted);font-weight:400}
 .notice{padding:10px 14px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:13.5px;border:1px solid transparent}
 .notice.info{background:var(--primary-soft);color:var(--primary-soft-ink)}
 
-.composer{position:sticky;bottom:0;background:linear-gradient(to top,var(--ground) 70%,transparent);padding:12px 32px 22px}
+.composer{position:sticky;bottom:0;background:var(--ground);padding:12px 32px 22px}
+.composer::before{content:"";position:absolute;left:0;right:0;bottom:100%;height:20px;background:linear-gradient(to top,var(--ground),transparent);pointer-events:none}
 .composer .box{max-width:860px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:flex-end;padding:10px 10px 10px 16px}
 .composer .box:focus-within{border-color:var(--primary)}
 .composer textarea{flex:1;border:0;background:transparent;resize:none;font:inherit;color:var(--ink);line-height:1.5;max-height:160px;padding:6px 0;outline:none}
@@ -198,11 +202,6 @@ details.ev summary .cnt{font-size:11.5px;color:var(--muted);font-weight:400}
     </div>
 
     <section>
-      <h2>시연 시나리오</h2>
-      <div class="scenario" id="scenario"></div>
-    </section>
-
-    <section>
       <h2>다른 질문 예시</h2>
       <div class="chips" id="chips"></div>
     </section>
@@ -228,13 +227,14 @@ details.ev summary .cnt{font-size:11.5px;color:var(--muted);font-weight:400}
     <div class="thread" id="thread">
       <div class="welcome">
         <h2>무엇을 처리해야 하나요?</h2>
-        <p>계정 발급, VPN 신청, 방화벽 오픈, 배포, 장애 문의 같은 사내 IT 업무를 평소 말하듯 물어보세요. 왼쪽 시연 시나리오는 계정 발급 → 접속 장애 → 정책 변경 요청처 안내로 이어지는 3턴 흐름입니다.</p>
+        <p>계정 발급, VPN 신청, 방화벽 오픈, 배포, 장애 문의 같은 사내 IT 업무를 평소 말하듯 물어보세요. 답변이 나오면 이어서 물어볼 만한 질문이 프롬프트 창 위에 뜹니다.</p>
         <div class="areas" id="areas"></div>
       </div>
     </div>
     <div class="composer">
+      <div class="suggest" id="suggest"></div>
       <div class="box">
-        <textarea id="input" rows="1" placeholder="예: 퇴직자 DB 계정 회수해야 하는데 절차 알려줘"></textarea>
+        <textarea id="input" rows="1" placeholder="예: 계약계 DB 신규 조회 계정을 발급받으려고 하는데 어떻게 해야 해?"></textarea>
         <button class="btn ghost" id="stopBtn" hidden>중지</button>
         <button class="btn" id="askBtn">질문하기</button>
       </div>
@@ -295,8 +295,18 @@ const bm25 = new BM25(CASES.map(c => tokenize(caseText(c))));
 function searchCases(query, topK = 8) {
   const s = bm25.scores(tokenize(query));
   const max = Math.max(...s);
-  return s.map((v, i) => ({ c: CASES[i], raw: v, norm: max > 0 ? v / max : 0 }))
+  return s.map((v, i) => ({ i, c: CASES[i], raw: v, norm: max > 0 ? v / max : 0 }))
     .filter(x => x.raw > 0).sort((a, b) => b.raw - a.raw).slice(0, topK);
+}
+
+/* 변별력 있는 키워드 겹침 (search.py 의 _keyword_overlap 과 같은 규칙).
+   '절차'·'신청'처럼 거의 모든 사례에 나오는 토큰은 근거가 되지 못하므로, 전체의 30% 이하에만
+   등장하는 토큰만 센다. 질의와 1위 사례가 이런 토큰을 하나도 공유하지 않으면 키워드 미매칭이다. */
+const DISTINCTIVE_DF = 0.3 * CASES.length;
+function keywordOverlap(query, row) {
+  const set = bm25.tf[row];
+  return [...new Set(tokenize(query))].filter(t =>
+    t.length >= 2 && t[0] !== '#' && (bm25.df.get(t) || 0) <= DISTINCTIVE_DF && set.has(t));
 }
 
 /* ───────── 담당자 라우팅 (search.route_contact 와 같은 순서) ───────── */
@@ -317,13 +327,16 @@ function pack(key, routed_by, hits) {
   const e = ENTRY[key] || CONTACTS.default;
   return { key, team: e.team, contact: e.contact, channel: e.channel, note: e.note, routed_by, matched_keywords: hits || [] };
 }
-/* A 단계: 사례 DB 밖 영역 키워드 → 검색 결과와 무관하게 담당자 연결 */
+/* A 단계: 사례 DB 밖 영역 키워드 → 검색 결과와 무관하게 담당자 연결.
+   A-2: 기본 창구 키워드(사원증·회의실 등 사내 IT 사례가 아닌 요청)는 1차 접수 창구로. */
 function directoryOnlyRoute(query) {
   for (const [key, e] of ENTRIES) {
     if (key === 'default' || COVERED.has(key)) continue;
     const hits = keywordHits(query, e.keywords);
-    if (hits.length) return pack(key, 'keyword', hits);
+    if (hits.length) return { contact: pack(key, 'keyword', hits), reason: 'directory_only_topic' };
   }
+  const deskHits = keywordHits(query, (ENTRY.default || {}).keywords);
+  if (deskHits.length) return { contact: pack('default', 'keyword', deskHits), reason: 'no_matching_case' };
   return null;
 }
 /* B 단계: 약한 매칭일 때 → 키워드 일치 팀 > 판정기가 고른 팀 > 기본 창구 */
@@ -531,22 +544,39 @@ const stopBtn = document.getElementById('stopBtn');
 const turns = [];
 let running = false, ctl = null;
 
-const SCENARIO = [
-  ['1턴 · 계정 발급', '계약계 DB 신규 조회 계정을 발급받으려고 하는데 어떻게 해야 해?'],
-  ['2턴 · 접속 장애', '보안접속 에이전트 연결이 계속 끊기는데 어떡해야 해'],
-  ['3턴 · 정책 변경 요청처', 'MFA 세션의 재인증 주기를 늘리려면 어떻게 해야 해?'],
+/* 시연 흐름: (직접 타이핑) 계정 발급 → 접속 장애 → 사원증 발급.
+   첫 질문은 사람이 직접 입력하고, 답변이 끝날 때마다 이어지는 질문이 프롬프트 창 위에 나타난다. */
+const DEMO = [
+  '보안접속 에이전트 연결이 계속 끊기는데 어떡해야 해',
+  '사원증 발급은 어떻게 해야 해?',
 ];
 const CHIPS = ['퇴직자 DB 계정 회수해야 하는데 절차 알려줘', '재택근무 VPN 신청 어떻게 해?', '운영 배포 롤백은 어떻게 해?',
   '쿼리가 너무 느려서 실행계획 튜닝 받고 싶어', '사원증 재발급 절차를 알려줘', '회의실 예약은 어떻게 해?'];
-const scen = document.getElementById('scenario');
-SCENARIO.forEach(([lbl, q]) => { const b = document.createElement('button'); b.innerHTML = `<b>${esc(lbl)}</b>${esc(q)}`; b.onclick = () => submit(q); scen.appendChild(b); });
 const chips = document.getElementById('chips');
 CHIPS.forEach(q => { const b = document.createElement('button'); b.textContent = q; b.onclick = () => submit(q); chips.appendChild(b); });
+
+const suggest = document.getElementById('suggest');
+let demoStep = 0, answered = 0;
+
+function renderSuggest(animate) {
+  suggest.innerHTML = '';
+  // 첫 답변이 나오기 전에는 비워 두고(직접 타이핑), 흐름이 끝나면 줄을 접는다
+  if (!answered || demoStep >= DEMO.length) { suggest.hidden = true; return; }
+  suggest.hidden = false;
+  suggest.appendChild(el('span', 'lead-label', '이어서 물어보기'));
+  const q = DEMO[demoStep];
+  const b = el('button', 'next'); b.type = 'button'; b.textContent = q;
+  if (animate && !REDUCED_MOTION) b.classList.add('reveal');
+  b.onclick = () => submit(q);
+  suggest.appendChild(b);
+}
 const areas = document.getElementById('areas');
 CATEGORIES.forEach(c => { const s = document.createElement('span'); s.textContent = c; areas.appendChild(s); });
 const dirlist = document.getElementById('dirlist');
 ENTRIES.forEach(([k, e]) => { const li = document.createElement('li'); if (k !== 'default' && !COVERED.has(k)) li.className = 'extra';
   li.innerHTML = `<b>${esc(e.team)}</b><span class="mono">${esc(e.contact)}</span><br><span>${esc(k === 'default' ? e.note : e.note)}</span>`; dirlist.appendChild(li); });
+
+renderSuggest(false);
 
 input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
 input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(input.value); } });
@@ -599,6 +629,8 @@ async function submit(q) {
   q = String(q || '').trim(); if (!q || running) return;
   input.value = ''; input.style.height = 'auto';
   running = true; askBtn.disabled = true; stopBtn.hidden = false; ctl = new AbortController();
+  if (demoStep < DEMO.length && q === DEMO[demoStep]) demoStep++;   // 시연 흐름을 한 칸 진행
+  suggest.classList.add('busy');
   const u = el('div', 'turn-user', `<span class="eyebrow">질문</span><div class="q">${esc(q)}</div>`); thread.appendChild(u);
   const card = el('div', 'card', stripHtml() + '<div class="body"><div class="thinking"><i></i>사례를 찾는 중…</div></div>');
   thread.appendChild(card); card.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -620,9 +652,13 @@ async function submit(q) {
     let decision;
     const forced = directoryOnlyRoute(q);
     if (forced) {
-      decision = { weak_match: true, reason: 'directory_only_topic', case_ids: [], contact: forced, clarify: askFor(forced.key),
-        one_liner: '이 요청은 과거 처리 사례로 답할 업무가 아니라 담당 팀에 직접 요청할 사항입니다.' };
-    } else if (!cands.length) {
+      decision = { weak_match: true, reason: forced.reason, case_ids: [], contact: forced.contact,
+        clarify: askFor(forced.contact.key),
+        one_liner: forced.reason === 'directory_only_topic'
+          ? '이 요청은 과거 처리 사례로 답할 업무가 아니라 담당 팀에 직접 요청할 사항입니다.'
+          : '이 질문에 정확히 맞는 사례가 없습니다.' };
+    } else if (!cands.length || !keywordOverlap(q, cands[0].i).length) {
+      // 후보가 없거나, 1위 사례와 변별력 있는 키워드를 하나도 공유하지 않는 경우
       decision = { weak_match: true, reason: 'no_matching_case', case_ids: [], contact: weakRoute(q, null), clarify: askFor('default'),
         one_liner: '이 질문에 정확히 맞는 사례가 없습니다.' };
     } else if (sample) {
@@ -639,7 +675,8 @@ async function submit(q) {
       }
     } else {
       /* 검색 전용: 상위 후보의 키워드 점수가 충분하면 사례로, 아니면 담당자 */
-      const strong = cands[0].raw >= 6 && cands.filter(x => x.norm >= 0.6).length >= 1;
+      const strong = cands[0].raw >= 6 && cands.filter(x => x.norm >= 0.6).length >= 1
+        && keywordOverlap(q, cands[0].i).length > 0;
       if (strong) { const ids = cands.filter(x => x.norm >= 0.45).slice(0, 4).map(x => x.c.case_id); decision = { weak_match: false, reason: 'matched', case_ids: ids, contact: null, related: relatedRoute(BY_ID[ids[0]].category) }; }
       else { const contact = weakRoute(q, null); decision = { weak_match: true, reason: 'no_matching_case', case_ids: [], contact, clarify: askFor(contact.key), one_liner: '이 질문에 정확히 맞는 사례가 없습니다.' }; }
     }
@@ -694,6 +731,7 @@ async function submit(q) {
   } finally {
     turns.push({ role: 'assistant', text: answerText });
     running = false; askBtn.disabled = false; stopBtn.hidden = true; ctl = null;
+    answered++; suggest.classList.remove('busy'); renderSuggest(true);
     card.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }
 }

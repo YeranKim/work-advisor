@@ -181,6 +181,8 @@ def route_contact(query: str, results) -> dict:
       A. 디렉터리에만 있는 영역(사례 DB 에 카테고리가 없는 팀, 예: 성능·튜닝, 인증·세션 정책)의
          키워드 규칙이 일치하면 → 검색 결과가 그럴듯해 보여도 담당자 안내 (weak_match=True).
          (예: 'MFA 재인증 주기 늘리기'는 세션 만료 장애 사례와 벡터 유사도가 높지만 정책 변경 요청이다)
+      A-2. 기본 창구(default)의 키워드(사원증·회의실 등 사내 IT 사례가 아닌 요청)가 일치하면
+         → weak_reason='no_matching_case' 로 1차 접수 창구를 안내한다.
       B. 검색 신호로 약한 매칭이면 → 키워드 일치 팀 > 임베딩 유사도 ≥ CONTACT_SIM_FLOOR (2위와 CONTACT_SIM_MARGIN 이상 차이) 팀 > 기본 창구.
       C. 정상 매칭이면 → contact 없음, related_contact 에 1위 사례 카테고리 담당 팀.
     """
@@ -211,6 +213,12 @@ def route_contact(query: str, results) -> dict:
             return {"weak_match": True, "weak_reason": "directory_only_topic",
                     "contact": _pack(key, entry, "keyword", hits_by_key[key]),
                     "related_contact": None, "contact_similarity": sims}
+
+    # A-2. 기본 창구 키워드 일치 → 사내 IT 사례가 아닌 요청(사원증·회의실 등)이므로 1차 창구로
+    if hits_by_key.get("default"):
+        return {"weak_match": True, "weak_reason": "no_matching_case",
+                "contact": _pack("default", dict(entries)["default"], "keyword", hits_by_key["default"]),
+                "related_contact": None, "contact_similarity": sims}
 
     # B. 약한 매칭 → 키워드 > 유사도 > 기본
     if weak:
